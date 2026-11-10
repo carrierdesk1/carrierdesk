@@ -37,6 +37,7 @@ button:hover{background:#f1f5f9}
 .val{font-size:18px;font-weight:700;margin-top:4px}.small{font-size:12px;color:var(--mut)}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:20px}
 .grid .val{font-size:15px;font-weight:500}
+.contact{border-top:1px solid var(--line);background:#fbfcfe}.contact .small{padding:16px 20px}
 a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .act{padding:0 20px 20px}
 .act button{background:var(--navy);color:#fff;border-color:var(--navy)}
@@ -81,6 +82,22 @@ function ins(c) {
   return { t: 'Not on File', s: 'No active insurance', bad: true };
 }
 
+function contact(c) {
+  if (!c.censusFound) return '<div class="contact"><div class="small">No contact data found in the FMCSA Census file for this carrier.</div></div>';
+  var email = c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '—';
+  var phone = c.phone ? '<a href="tel:' + esc(c.phone.replace(/\D/g, '')) + '">' + esc(c.phone) + '</a>' : '—';
+  var cell = c.cellPhone ? '<a href="tel:' + esc(c.cellPhone.replace(/\D/g, '')) + '">' + esc(c.cellPhone) + '</a>' : '—';
+  var officers = [c.officer1, c.officer2].filter(Boolean).join(', ') || '—';
+  return '<div class="contact"><div class="grid">' +
+    '<div><div class="lbl">Email</div><div class="val">' + email + '</div></div>' +
+    '<div><div class="lbl">Phone</div><div class="val">' + phone + '</div></div>' +
+    '<div><div class="lbl">Cell phone</div><div class="val">' + cell + '</div></div>' +
+    '<div><div class="lbl">Officers</div><div class="val">' + esc(officers) + '</div></div>' +
+    '<div><div class="lbl">MCS-150 date</div><div class="val">' + esc(c.mcs150Date || '—') + '</div></div>' +
+    '<div><div class="lbl">In FMCSA census since</div><div class="val">' + esc(c.censusAddDate || '—') + '</div></div>' +
+    '</div></div>';
+}
+
 function card(c, idx) {
   var a = c.authorized;
   var n = ins(c);
@@ -101,7 +118,8 @@ function card(c, idx) {
     '<div><div class="lbl">Safety rating</div><div class="val">' + esc(c.safetyRating || 'Not rated') + '</div></div>' +
     '<div><div class="lbl">Crashes</div><div class="val">' + c.crashTotal + '</div></div>' +
     '<div><div class="lbl">Physical address</div><div class="val">' + (c.address ? '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/' + encodeURIComponent(c.address) + '">' + esc(c.address) + '</a>' : '—') + '</div></div>' +
-    '</div><div class="act"><button type="button" onclick="save(' + idx + ')">Save lead</button></div></div>';
+    '</div>' + contact(c) +
+    '<div class="act"><button type="button" onclick="save(' + idx + ')">Save lead</button></div></div>';
 }
 
 $('f').addEventListener('submit', function (e) {
@@ -124,7 +142,7 @@ $('f').addEventListener('submit', function (e) {
 function save(i) {
   var c = found[i], l = getLeads();
   if (l.some(function (x) { return x.dot === c.dot; })) { alert('Already saved'); return; }
-  l.push({ dot: c.dot, mc: c.mc.join(' '), name: c.name, address: c.address, authorized: c.authorized ? 'Yes' : 'No', common: c.common, units: c.powerUnits, status: 'New' });
+  l.push({ dot: c.dot, mc: c.mc.join(' '), name: c.name, address: c.address, authorized: c.authorized ? 'Yes' : 'No', common: c.common, units: c.powerUnits, email: c.email || '', phone: c.phone || c.cellPhone || '', officer: c.officer1 || '', status: 'New' });
   setLeads(l); renderLeads();
 }
 function del(i) { var l = getLeads(); l.splice(i, 1); setLeads(l); renderLeads(); }
@@ -134,9 +152,9 @@ function renderLeads() {
   var l = getLeads();
   if (!l.length) { $('leads').innerHTML = '<p class="small">No leads yet. Search a carrier and choose Save lead.</p>'; return; }
   var opts = ['New', 'Contacted', 'Interested', 'Onboarded', 'Not interested'];
-  $('leads').innerHTML = '<table><tr><th>Name</th><th>MC / DOT</th><th>Authorized</th><th>Status</th><th></th></tr>' +
+  $('leads').innerHTML = '<table><tr><th>Name</th><th>MC / DOT</th><th>Authorized</th><th>Email / Phone</th><th>Status</th><th></th></tr>' +
     l.map(function (x, i) {
-      return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.authorized) + '</td><td><select onchange="setStatus(' + i + ',this.value)">' +
+      return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.authorized) + '</td><td>' + esc(x.email || '—') + '<br><span class="small">' + esc(x.phone || '') + '</span></td><td><select onchange="setStatus(' + i + ',this.value)">' +
         opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
         '</select></td><td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
     }).join('') + '</table>';
@@ -144,8 +162,8 @@ function renderLeads() {
 
 $('csv').onclick = function () {
   var l = getLeads();
-  var rows = [['Name', 'MC', 'DOT', 'Address', 'Authorized', 'Common authority', 'Power units', 'Status']].concat(
-    l.map(function (x) { return [x.name, x.mc, x.dot, x.address, x.authorized, x.common, x.units, x.status]; }));
+  var rows = [['Name', 'MC', 'DOT', 'Address', 'Authorized', 'Common authority', 'Power units', 'Email', 'Phone', 'Officer', 'Status']].concat(
+    l.map(function (x) { return [x.name, x.mc, x.dot, x.address, x.authorized, x.common, x.units, x.email, x.phone, x.officer, x.status]; }));
   var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
