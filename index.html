@@ -529,7 +529,7 @@ $('bmode').onchange = function () {
 var PAGE_SIZE = 500;
 var bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
-var bDrop = { units: 0, equip: 0, cargo: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
+var bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
 var FETCH_CONC = 5, AUTH_CONC = 3, AUTH_CHUNK = 200;
 
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
@@ -557,7 +557,7 @@ function bStatus() {
   if (left && bulk.length) t += ' · checking authority…';
   if (bulk.length && (bInsQ.length || bInsActive)) t += ' · checking insurance…';
   if (bViewN !== bulk.length) t += ' · showing ' + bViewN.toLocaleString() + ' after filters';
-  if (bDrop.units || bDrop.equip || bDrop.cargo) t += ' · removed by your filters → trucks: ' + bDrop.units + ', equipment: ' + bDrop.equip + ', cargo: ' + bDrop.cargo;
+  if (bDrop.units || bDrop.equip || bDrop.cargo || bDrop.auth) t += ' · removed by your filters → trucks: ' + bDrop.units + ', equipment: ' + bDrop.equip + ', cargo: ' + bDrop.cargo + ', authority: ' + bDrop.auth;
   if (bWarn.length) t += ' · ' + bWarn.join(' ');
   $('bmsg').textContent = t;
 }
@@ -692,7 +692,7 @@ function bAddRows(d) {
     if (!bSeen[k]) { bSeen[k] = 1; r._k = k; bulk.push(r); if (!r.authority) bAuthQ.push(r); if (bInsWanted()) { r._iq = 1; bInsQ.push(r); } }
   });
   bScanned += d.scanned || 0; bDone++;
-  if (d.dropped) { bDrop.units += d.dropped.units; bDrop.equip += d.dropped.equip; bDrop.cargo += d.dropped.cargo; }
+  if (d.dropped) { bDrop.units += d.dropped.units; bDrop.equip += d.dropped.equip; bDrop.cargo += d.dropped.cargo; bDrop.auth += d.dropped.auth || 0; }
   (d.warnings || []).forEach(function (w) { if (bWarn.indexOf(w) === -1) bWarn.push(w); });
   bAuthPump(); bInsPump();
 }
@@ -793,7 +793,7 @@ $('bf').addEventListener('submit', function (e) {
     '&state=' + encodeURIComponent($('bstate').value) + '&city=' + encodeURIComponent($('bcity').value) +
     '&hasemail=' + ($('bhasemail').checked ? '1' : '0') + '&hasphone=' + ($('bhasphone').checked ? '1' : '0');
   bRun++; bulk = []; bSeen = {}; bQueue = []; bActive = 0; bDone = 0; bTotal = null; bPlain = false;
-  bDrop = { units: 0, equip: 0, cargo: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
+  bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
   bStart();
 });
 $('bstop').onclick = function () { bStop = true; $('bstop').style.display = 'none'; };
