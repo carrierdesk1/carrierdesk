@@ -1,4 +1,6 @@
 const BASE = 'https://mobile.fmcsa.dot.gov/qc/services';
+// FMCSA Company Census File (free, no key): data.transportation.gov dataset az4n-8mr2
+const CENSUS = 'https://data.transportation.gov/resource/az4n-8mr2.json';
 
 async function get(path, key) {
   const sep = path.includes('?') ? '&' : '?';
@@ -12,14 +14,33 @@ async function get(path, key) {
   return r.json();
 }
 
+// Census row for one DOT number. Optional: returns null if anything fails.
+async function census(dot) {
+  try {
+    const url = CENSUS + '?$limit=1&dot_number=' + encodeURIComponent(String(dot));
+    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 const AUTH = { A: 'Active', I: 'Inactive', N: 'None' };
 const authText = (v) => AUTH[v] || (v ? String(v) : 'Unknown');
 const kNum = (v) => Number(String(v == null ? 0 : v).replace(/[^0-9.]/g, '')) || 0;
+const day = (v) => (v ? String(v).slice(0, 10) : '');
+const fmtPhone = (v) => {
+  const d = String(v || '').replace(/\D/g, '');
+  return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(v || '');
+};
 
-function shape(c, mcList) {
+function shape(c, mcList, cs) {
   const bipd = kNum(c.bipdInsuranceOnFile);
   const cargo = kNum(c.cargoInsuranceOnFile);
   const bond = kNum(c.bondInsuranceOnFile);
+  cs = cs || {};
   return {
     dot: c.dotNumber,
     mc: mcList || [],
@@ -45,7 +66,16 @@ function shape(c, mcList) {
     crashTotal: kNum(c.crashTotal),
     address: [c.phyStreet, c.phyCity, c.phyState, c.phyZipcode].filter(Boolean).join(', '),
     oos: !!c.oosDate,
-    oosDate: c.oosDate || ''
+    oosDate: c.oosDate || '',
+    // From the Census file (may be empty if FMCSA has none on file)
+    email: (cs.email_address || '').toLowerCase(),
+    phone: fmtPhone(cs.phone),
+    cellPhone: fmtPhone(cs.cell_phone),
+    officer1: cs.company_officer_1 || '',
+    officer2: cs.company_officer_2 || '',
+    mcs150Date: day(cs.mcs150_date),
+    censusAddDate: day(cs.add_date),
+    censusFound: !!cs.dot_number
   };
 }
 
@@ -77,21 +107,24 @@ module.exports = async (req, res) => {
       .filter((c) => c && c.dotNumber)
       .slice(0, 10);
 
-    const out = [];
-    for (const c of carriers) {
-      let mcs = [];
-      try {
-        const d = await get('/carriers/' + c.dotNumber + '/docket-numbers', key);
-        const arr = d && d.content ? (Array.isArray(d.content) ? d.content : [d.content]) : [];
-        mcs = arr
-          .map((x) => x.docket || x)
-          .filter((x) => x && x.docketNumber)
-          .map((x) => (x.prefix || 'MC') + x.docketNumber);
-      } catch (e) {
-        /* MC list is optional */
-      }
-      out.push(shape(c, mcs));
-    }
+    const out = await Promise.all(
+      carriers.map(async (c) => {
+        const mcPromise = (async () => {
+          try {
+            const d = await get('/carriers/' + c.dotNumber + '/docket-numbers', key);
+            const arr = d && d.content ? (Array.isArray(d.content) ? d.content : [d.content]) : [];
+            return arr
+              .map((x) => x.docket || x)
+              .filter((x) => x && x.docketNumber)
+              .map((x) => (x.prefix || 'MC') + x.docketNumber);
+          } catch (e) {
+            return []; /* MC list is optional */
+          }
+        })();
+        const [mcs, cs] = await Promise.all([mcPromise, census(c.dotNumber)]);
+        return shape(c, mcs, cs);
+      })
+    );
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ results: out });
