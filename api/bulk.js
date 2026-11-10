@@ -28,11 +28,14 @@ const CARGO = {
 
 let keyCache = null;
 
+// Optional: a free Socrata app token (set SOCRATA_APP_TOKEN in Vercel) avoids throttling.
+const tokenHeaders = () => (process.env.SOCRATA_APP_TOKEN ? { 'X-App-Token': process.env.SOCRATA_APP_TOKEN } : {});
+
 async function soda(params) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
-  const r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000) });
+  const r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000), headers: tokenHeaders() });
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     throw new Error('Census API status ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
@@ -103,7 +106,7 @@ async function sodaAt(base, params, ms) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
-  const r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000) });
+  const r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     throw new Error('Motus API status ' + r.status + (t ? ': ' + t.slice(0, 150) : ''));
@@ -193,6 +196,33 @@ function equipmentOf(tractors, trucks, trailers, units) {
 
 module.exports = async (req, res) => {
   try {
+    // Authority is looked up separately and in the background, so the carrier list shows up right away.
+    if (req.query.mode === 'auth') {
+      const who0 = await requireUser(req, res);
+      if (who0 === null) return;
+      const pairs = String(req.query.pairs || '').split(',').filter(Boolean).slice(0, 300).map((p) => {
+        const a = p.split(':');
+        return { dot: a[0], mc: (a[1] || '').replace(/\D/g, '') };
+      });
+      const warn0 = [];
+      const au0 = await loadAuthority(pairs.map((p) => p.dot), warn0);
+      const out0 = {};
+      pairs.forEach((p) => {
+        const list = au0.ok ? (au0.map[stripZeros(p.dot)] || []) : [];
+        let status = 'Unknown', mc = '';
+        if (list.length) {
+          status = statusOf(list, stripZeros(p.mc), au0.statusCol, au0.typeCol);
+          if (!p.mc) {
+            const d = list.find((x) => /^MC/i.test(String(x.docket_number || '')));
+            if (d) mc = String(d.docket_number).toUpperCase();
+          }
+        }
+        out0[p.dot] = { status: status, mc: mc };
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ auth: out0, warnings: warn0 });
+    }
+
     const keys = await getKeys();
     const has = (k) => keys.indexOf(k) !== -1;
 
@@ -251,17 +281,46 @@ module.exports = async (req, res) => {
       order = 'add_date,dot_number';
     }
 
-    let raw;
-    if (mode === 'mc') {
-      // Ask Census for exact-length MCs only; if that filter is not accepted, fall back and filter here.
+    // Only ask Census for the columns we actually use: far smaller download, much faster.
+    const sel = keys.filter((k) =>
+      /^(dot_number|legal_name|dba_name|phone|cell_phone|email_address|company_officer_1|power_units|total_drivers|phy_city|phy_state|add_date|status_code|docket[123](prefix)?)$/.test(k) ||
+      /^(crgo|cargo)/i.test(k) || /^(own|trm|trp)(tract|truck|trail)/i.test(k)
+    ).join(',');
+    async function getPage(where, off) {
+      const p = { $where: where, $order: order, $limit: PAGE, $offset: off };
+      if (sel) p.$select = sel;
+      try { return await soda(p); }
+      catch (e) { if (!sel) throw e; delete p.$select; return await soda(p); }
+    }
+    async function getCount(where) {
       try {
-        raw = await soda({ $where: buildWhere(true), $order: order, $limit: PAGE, $offset: offset });
-        if (!raw.length && offset === 0) raw = await soda({ $where: buildWhere(false), $order: order, $limit: PAGE, $offset: offset });
-      } catch (e) {
-        raw = await soda({ $where: buildWhere(false), $order: order, $limit: PAGE, $offset: offset });
-      }
-    } else {
-      raw = await soda({ $where: buildWhere(false), $order: order, $limit: PAGE, $offset: offset });
+        const r = await soda({ $select: 'count(*)', $where: where });
+        const n = parseInt(r && r[0] ? Object.values(r[0])[0] : '', 10);
+        return isFinite(n) ? n : null;
+      } catch (e) { return null; }
+    }
+
+    // On the first request also ask how many records match in total, so the page can fetch all the rest in parallel.
+    let raw, total = null, plain = req.query.plain === '1' || mode !== 'mc';
+    if (!plain) {
+      // MC mode: ask Census for exact-length MCs only; if that filter is not accepted, fall back to plain.
+      const wLen = buildWhere(true);
+      try {
+        const jobs = [getPage(wLen, offset)];
+        if (offset === 0) jobs.push(getCount(wLen));
+        const out = await Promise.all(jobs);
+        raw = out[0];
+        total = out.length > 1 ? out[1] : null;
+        if (!raw.length && offset === 0) plain = true;
+      } catch (e) { plain = true; }
+    }
+    if (plain) {
+      const wPlain = buildWhere(false);
+      const jobs = [getPage(wPlain, offset)];
+      if (offset === 0) jobs.push(getCount(wPlain));
+      const out = await Promise.all(jobs);
+      raw = out[0];
+      total = out.length > 1 ? out[1] : null;
     }
 
     // Post filters
@@ -347,20 +406,23 @@ module.exports = async (req, res) => {
     });
 
     // Authority status per carrier
+    // Skipped here when no authority filter is chosen: the page asks for it afterwards (mode=auth), so rows appear much faster.
     const authWanted = String(req.query.auth || '').toLowerCase();
-    const au = await loadAuthority(rows.map((r) => r.dot), warnings);
-    rows.forEach((r) => {
-      const list = au.ok ? (au.map[stripZeros(r.dot)] || []) : [];
-      r.authority = list.length ? statusOf(list, stripZeros(r.mc), au.statusCol, au.typeCol) : 'Unknown';
-      if (!r.mc && list.length) {
-        const d = list.find((x) => /^MC/i.test(String(x.docket_number || '')));
-        if (d) r.mc = String(d.docket_number).toUpperCase();
-      }
-    });
     let outRows = rows;
-    if (authWanted) {
-      if (au.ok) outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted);
-      else warnings.push('Authority filter ignored because authority data could not be loaded.');
+    if (authWanted || req.query.noauth !== '1') {
+      const au = await loadAuthority(rows.map((r) => r.dot), warnings);
+      rows.forEach((r) => {
+        const list = au.ok ? (au.map[stripZeros(r.dot)] || []) : [];
+        r.authority = list.length ? statusOf(list, stripZeros(r.mc), au.statusCol, au.typeCol) : 'Unknown';
+        if (!r.mc && list.length) {
+          const d = list.find((x) => /^MC/i.test(String(x.docket_number || '')));
+          if (d) r.mc = String(d.docket_number).toUpperCase();
+        }
+      });
+      if (authWanted) {
+        if (au.ok) outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted);
+        else warnings.push('Authority filter ignored because authority data could not be loaded.');
+      }
     }
 
     if (mode === 'mc') outRows.sort((a, b) => a.mc.localeCompare(b.mc));
@@ -369,6 +431,9 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       rows: outRows,
       scanned: raw.length,
+      total: total,
+      plain: plain,
+      pageSize: PAGE,
       nextOffset: raw.length === PAGE ? offset + PAGE : null,
       warnings: warnings
     });
