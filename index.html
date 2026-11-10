@@ -4,26 +4,110 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CarrierDesk</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-:root{--bg:#f4f6fb;--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--navy:#0b1b3a;--acc:#2563eb;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+:root{--bg:#eef2f8;--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--navy:#0a1830;--navy2:#0f2a57;--acc:#1a5fe0;--amb:#f59e0b;--ok:#16a34a;--bad:#dc2626;--head:#0b1424}
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
-header{background:linear-gradient(135deg,#0b1b3a 0%,#16336b 60%,#2563eb 140%);color:#fff;padding:28px 18px 64px}
-.wrap{max-width:920px;margin:0 auto}
-.brand{display:flex;align-items:center;gap:12px}
-.logo{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:22px}
-header h1{margin:0;font-size:26px;letter-spacing:-.02em}
-header p{margin:6px 0 0;font-size:14px;color:#c7d4f0}
-main{max-width:920px;margin:-40px auto 40px;padding:0 16px}
-form{display:flex;gap:10px;flex-wrap:wrap;background:#fff;padding:14px;border-radius:16px;box-shadow:0 10px 30px rgba(15,23,42,.12)}
-select,input,button{font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
-input{flex:1;min-width:180px}
+select,input,button{font:inherit;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+input{flex:1;min-width:150px}
 input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:var(--acc)}
 button{cursor:pointer;font-weight:600;transition:.15s}
 button:hover{background:#f1f5f9}
+button:disabled{opacity:.45;cursor:default}
 .go{background:var(--acc);color:#fff;border-color:var(--acc)}
-.go:hover{background:#1d4ed8}
-#msg,#bmsg{margin:14px 4px;color:var(--mut);font-size:14px}.err{color:var(--bad)!important}
+.go:hover{background:#154dbb}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+.wm{font-style:italic;font-weight:800;letter-spacing:-.02em;color:#fff}.wm span{color:var(--amb)}
+.logo{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:21px;flex:none}
+
+/* ---------- login / signup ---------- */
+#auth{display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;background:radial-gradient(1200px 500px at 85% -10%,#f59e0b55,transparent 60%),linear-gradient(135deg,#071328 0%,#0f2a57 60%,#1a5fe0 140%)}
+.authbox{background:#fff;border-radius:22px;max-width:430px;width:100%;padding:28px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
+.abrand{display:flex;align-items:center;gap:12px;justify-content:center}
+.abrand .wm{font-size:30px;color:var(--navy)}
+.abrand .logo{background:var(--navy)}
+.asub{text-align:center;color:var(--mut);margin:6px 0 18px;font-size:14px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#f1f5f9;padding:5px;border-radius:12px;margin-bottom:16px}
+.tabs button{border:0;background:transparent;color:var(--mut)}
+.tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(15,23,42,.12)}
+.aform{display:flex;flex-direction:column;gap:10px}
+.aform label{font-size:12px;font-weight:600;color:var(--mut);margin-bottom:-4px}
+.aform input{width:100%}
+.aform .go{padding:13px;margin-top:6px}
+#amsg{margin-top:12px;font-size:13px;min-height:18px;text-align:center}
+.notice{background:#fef3c7;color:#92400e;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px}
+.linkbtn{background:none;border:0;padding:0;color:var(--acc);font-weight:600;font-size:13px}
+
+/* ---------- app shell ---------- */
+#app{display:none;min-height:100vh}
+.side{width:236px;flex:none;background:linear-gradient(180deg,#081428,#0c2147 70%,#0a1830);color:#cbd5e1;padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.sbrand{display:flex;align-items:center;gap:10px;padding:0 6px 22px}
+.sbrand .wm{font-size:22px}
+.side nav a{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;color:#cbd5e1;font-weight:600;font-size:14px;margin-bottom:6px;text-decoration:none}
+.side nav a:hover{background:rgba(255,255,255,.07)}
+.side nav a.on{background:linear-gradient(90deg,#1a5fe0,#2a74f5);color:#fff;box-shadow:0 6px 18px rgba(26,95,224,.4)}
+.side nav svg{width:19px;height:19px;flex:none}
+.bd{margin-left:auto;background:var(--amb);color:#111827;border-radius:99px;font-size:11px;padding:1px 8px;font-weight:800}
+.sp{flex:1}
+#helpbox{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:16px;text-align:center;margin-bottom:14px}
+#helpbox b{display:block;color:#fff;font-size:17px}#helpbox p{margin:4px 0 12px;font-size:12px}
+#helpbox a{display:block;background:var(--acc);color:#fff;padding:10px;border-radius:10px;font-weight:700;font-size:13px}
+.content{flex:1;min-width:0}
+.hero{position:relative;height:176px;padding:26px 32px 0;overflow:hidden;color:#fff;background:radial-gradient(600px 220px at 78% 100%,#f59e0b66,transparent 70%),linear-gradient(110deg,#071328 0%,#0f2a57 55%,#1d4ea8 120%)}
+.hero .wm{font-size:44px;line-height:1}
+.hero .tag{font-style:italic;font-weight:600;margin-top:8px;color:#e2e8f0}
+.hero .truck{position:absolute;right:140px;bottom:46px;width:380px;opacity:.95}
+.um{position:absolute;top:14px;right:22px;z-index:5}
+.umbtn{display:flex;align-items:center;gap:10px;background:rgba(7,19,40,.7);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 14px}
+.umbtn:hover{background:rgba(7,19,40,.9)}
+.av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#ef4444);display:grid;place-items:center;font-weight:800;font-size:13px}
+.umenu{display:none;position:absolute;right:0;top:52px;background:#fff;color:var(--ink);border-radius:14px;box-shadow:0 16px 40px rgba(15,23,42,.25);min-width:220px;padding:8px}
+.umenu .em{padding:8px 12px;font-size:12px;color:var(--mut);word-break:break-all}
+.umenu button{width:100%;text-align:left;border:0;background:transparent;padding:10px 12px}
+.pad{padding:0 28px 40px;margin-top:-54px;position:relative;z-index:2}
+.panel{background:#fff;border-radius:18px;box-shadow:0 10px 30px rgba(15,23,42,.12);padding:14px}
+.searchbar{display:flex;gap:10px;flex-wrap:wrap}
+.searchbar .go{padding-left:22px;padding-right:22px}
+#msg,#bmsg{margin:12px 4px;color:var(--mut);font-size:14px}.err{color:var(--bad)!important}
+.bulkgrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;margin-top:22px;align-items:start}
+.bpanel{position:relative;padding:0;overflow:hidden}
+.ptitle{display:inline-block;background:var(--navy);color:#fff;font-weight:800;font-size:18px;padding:12px 40px 12px 22px;border-radius:0 0 40px 0}
+.bform{display:flex;gap:10px;flex-wrap:wrap;padding:16px}
+.chips{width:100%;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px;align-items:center}.chips label{display:flex;align-items:center;gap:6px;cursor:pointer;flex:0 0 auto}
+.chips .lbl{margin-right:4px}
+.chips input{flex:none;min-width:0;width:16px;height:16px;padding:0;margin:0}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.sc{background:#fff;border-radius:16px;box-shadow:0 6px 20px rgba(15,23,42,.08);padding:14px 14px 0;overflow:hidden}
+.sc .row{display:flex;align-items:center;gap:12px}
+.ic{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:20px;flex:none}
+.sc .n{font-size:28px;font-weight:800;line-height:1}.sc .t{font-size:13px;color:var(--mut);margin-top:4px}
+.sc svg{display:block;width:calc(100% + 28px);margin:6px -14px 0;height:38px}
+.strip{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.stripstats{display:flex;gap:12px;flex-wrap:wrap;flex:1}
+.ss{background:#fff;border-radius:14px;box-shadow:0 4px 14px rgba(15,23,42,.06);padding:12px 18px;min-width:150px}
+.ss .lbl{font-size:11px}.ss .v{font-size:24px;font-weight:800}
+.tools{display:flex;gap:8px;flex-wrap:wrap}
+.btn-o{border-color:var(--acc);color:var(--acc)}
+.btn-g{border-color:#16a34a;color:#15803d;background:#f0fdf4}
+.bw{overflow-x:auto;margin-top:14px;border-radius:14px;box-shadow:0 6px 20px rgba(15,23,42,.08)}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:14px}
+.bw table{min-width:980px;font-size:13px}
+.bw th{background:var(--head);color:#fff;font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+th,td{padding:12px;border-bottom:1px solid var(--line);text-align:left}
+.bw tbody tr:nth-child(even) td{background:#f8fafc}
+tr:last-child td{border-bottom:0}
+td select{padding:6px 8px;border-radius:8px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#pager{display:flex;gap:8px;justify-content:center;margin:18px 0 0;flex-wrap:wrap}
+.pg{min-width:40px;padding:9px 12px;border-radius:10px;background:#fff;border:1px solid var(--line)}
+.pg.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.eq,.au{display:inline-block;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
+.eq-Big{background:#dbe7ff;color:#1e40af}.eq-Power{background:#fef3c7;color:#b45309}.eq-Box{background:#ccfbf1;color:#0f766e}.eq-Multi{background:#dcfce7;color:#15803d}.eq-Unknown{background:#f1f5f9;color:#64748b}
+.au-Active{background:#dcfce7;color:#15803d}.au-Inactive{background:#fee2e2;color:#b91c1c}.au-Pending{background:#fef3c7;color:#b45309}.au-Unknown{background:#f1f5f9;color:#64748b}
+h3{margin:6px 4px 12px;font-size:20px}
+
+/* ---------- single carrier card ---------- */
 .card{background:#fff;border:1px solid var(--line);border-radius:16px;margin:16px 0;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,.05)}
 .top{padding:18px 20px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
 .top h2{margin:0;font-size:21px;letter-spacing:-.01em}
@@ -38,83 +122,288 @@ button:hover{background:#f1f5f9}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:20px}
 .grid .val{font-size:15px;font-weight:500}
 .contact{border-top:1px solid var(--line);background:#fbfcfe}.contact .small{padding:16px 20px}
-.chips{width:100%;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px;align-items:center}.chips label{display:flex;align-items:center;gap:6px;cursor:pointer;flex:0 0 auto}
-.chips .lbl{margin-right:4px}
-.chips input{flex:none;min-width:0;width:16px;height:16px;padding:0;margin:0}
-.bw{overflow-x:auto;margin-top:8px}.bw table{min-width:900px;font-size:13px}.bw td,.bw th{padding:9px 10px}
-a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .act{padding:0 20px 20px}
 .act button{background:var(--navy);color:#fff;border-color:var(--navy)}
-.act button:hover{background:#16336b}
-h3{margin:30px 4px 10px;font-size:18px}
-.tools{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
-table{width:100%;border-collapse:collapse;background:#fff;font-size:14px;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,.05)}
-th{background:#f8fafc;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
-th,td{padding:12px;border-bottom:1px solid var(--line);text-align:left}
-tr:last-child td{border-bottom:0}
-td select{padding:6px 8px;border-radius:8px}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.bstats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}
-.bstats div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-.bstats .val{font-size:22px}
-.eq{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap}
-.au{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap}
-.au-Active{background:#dcfce7;color:#15803d}.au-Inactive{background:#fee2e2;color:#b91c1c}.au-Pending{background:#fef3c7;color:#b45309}.au-Unknown{background:#f1f5f9;color:#64748b}
-.eq-Big{background:#e0e7ff;color:#3730a3}.eq-Power{background:#fef3c7;color:#b45309}.eq-Box{background:#ccfbf1;color:#0f766e}.eq-Multi{background:#dcfce7;color:#15803d}.eq-Unknown{background:#f1f5f9;color:#64748b}
-@media(max-width:640px){.stats,.grid{grid-template-columns:1fr}.bstats{grid-template-columns:repeat(2,1fr)}.stats div{border-right:0;border-bottom:1px solid var(--line)}table{display:block;overflow-x:auto}}
+
+@media(max-width:1100px){.bulkgrid{grid-template-columns:1fr}.hero .truck{display:none}}
+@media(max-width:820px){
+  #app{flex-direction:column}
+  .side{width:100%;height:auto;position:static;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;overflow-x:auto}
+  .sbrand{padding:0 8px 0 0}.side nav{display:flex;gap:6px}.side nav a{margin:0;white-space:nowrap}.sp,#helpbox{display:none}
+  .hero{height:150px;padding:20px 16px 0}.hero .wm{font-size:32px}.pad{padding:0 12px 30px}
+  .um{top:10px;right:10px}.stats,.grid{grid-template-columns:1fr}.stats div{border-right:0;border-bottom:1px solid var(--line)}
+}
 </style>
 </head>
 <body>
-<header><div class="wrap"><div class="brand"><div class="logo">🚚</div><div><h1>CarrierDesk</h1><p>Search FMCSA carriers, save leads, track who you have contacted.</p></div></div></div></header>
-<main>
-<form id="f">
-  <select id="type"><option value="mc">MC number</option><option value="dot">DOT number</option><option value="name">Company name</option></select>
-  <input id="q" placeholder="Enter MC, DOT or company name" required>
-  <button class="go" type="submit">Search carriers</button>
-</form>
-<div id="msg"></div>
-<div id="results"></div>
-<h3>Bulk search</h3>
-<form id="bf">
-  <select id="bmode"><option value="mc">MC range</option><option value="date">Date range (new carriers)</option></select>
-  <div id="bmc" style="display:contents"><input id="bfrom" placeholder="From MC, e.g. 500000" inputmode="numeric"><input id="bto" placeholder="To MC, e.g. 505000" inputmode="numeric"></div>
-  <div id="bdate" style="display:none"><input type="date" id="dfrom"> <input type="date" id="dto"></div>
-  <input id="bmin" type="number" min="0" placeholder="Minimum trucks" style="max-width:170px;flex:0 1 170px">
-  <input id="bmax" type="number" min="0" placeholder="Maximum trucks" style="max-width:170px;flex:0 1 170px">
-  <div class="chips" id="bequip"></div>
-  <select id="bauth"><option value="">Authority: Any</option><option value="active">Authority: Active</option><option value="inactive">Authority: Inactive</option></select>
-  <select id="bmatch"><option value="any">Any selected cargo</option><option value="all">All selected cargo</option></select>
-  <div class="chips" id="bcargo"></div>
-  <button class="go" type="submit">Fetch carriers</button>
-</form>
-<div id="bmsg"></div>
-<div class="bstats" id="bstats" style="display:none"></div>
-<div class="tools" id="btools" style="display:none">
-  <button id="bsave" type="button">Save all to leads</button>
-  <button id="bcsv" type="button">Export to Excel (CSV)</button>
-  <button id="bmore" type="button" style="display:none">Load more</button>
+
+<!-- ================= LOGIN / SIGN UP ================= -->
+<div id="auth">
+  <div class="authbox">
+    <div class="abrand"><div class="logo">🚚</div><div class="wm">Carrier<span>Desk</span></div></div>
+    <p class="asub">Find. Book. Keep Moving.</p>
+    <div class="notice" id="setup" style="display:none">
+      Login is not set up yet. Put your Supabase URL and anon key in <b>CONFIG</b> at the top of the script in index.html.
+      <div style="margin-top:8px"><button type="button" id="guest" class="go" style="padding:8px 14px">Continue without login</button></div>
+    </div>
+    <div class="tabs"><button type="button" id="tabLogin" class="on">Log in</button><button type="button" id="tabSignup">Sign up</button></div>
+    <form id="fLogin" class="aform">
+      <label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="email" required>
+      <label for="lPass">Password</label><input id="lPass" type="password" autocomplete="current-password" required>
+      <button class="go" type="submit">Log in</button>
+      <div style="text-align:center"><button type="button" class="linkbtn" id="forgot">Forgot password?</button></div>
+    </form>
+    <form id="fSignup" class="aform" style="display:none">
+      <label for="sName">Full name</label><input id="sName" type="text" autocomplete="name" required>
+      <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email" required>
+      <label for="sPass">Password (min 6 characters)</label><input id="sPass" type="password" minlength="6" autocomplete="new-password" required>
+      <button class="go" type="submit">Create account</button>
+    </form>
+    <div id="amsg"></div>
+  </div>
 </div>
-<div class="bw" id="bres"></div>
-<h3>My leads</h3>
-<div class="tools">
-  <button id="csv" type="button">Download CSV</button>
-  <button id="clear" type="button">Clear all leads</button>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <aside class="side">
+    <div class="sbrand"><div class="logo">🚚</div><div class="wm">Carrier<span>Desk</span></div></div>
+    <nav>
+      <a href="#" data-view="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Dashboard</a>
+      <a href="#" data-view="leads"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>My Leads<span class="bd" id="leadBadge">0</span></a>
+      <a href="#" id="navLogout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Logout</a>
+    </nav>
+    <div class="sp"></div>
+    <div id="helpbox" style="display:none"><b>Need Help?</b><p>Our team is here to help!</p><a id="helplink" href="#">Contact Support</a></div>
+  </aside>
+
+  <div class="content">
+    <header class="hero">
+      <div class="wm">Carrier<span>Desk</span></div>
+      <div class="tag">Find. Book. Keep Moving.</div>
+      <svg class="truck" viewBox="0 0 420 120" aria-hidden="true">
+        <rect x="6" y="14" width="272" height="66" rx="6" fill="#1b3f9a"/><rect x="6" y="14" width="272" height="10" rx="5" fill="#2a56c8"/>
+        <path d="M284 40h58l26 22v18h-84z" fill="#2d5fd6"/><rect x="330" y="46" width="30" height="18" rx="3" fill="#a8cbff"/>
+        <rect x="364" y="70" width="14" height="8" rx="2" fill="#fbbf24"/>
+        <rect x="0" y="80" width="400" height="8" fill="#0a1228"/>
+        <g fill="#0a1228" stroke="#475569" stroke-width="3"><circle cx="56" cy="92" r="15"/><circle cx="104" cy="92" r="15"/><circle cx="236" cy="92" r="15"/><circle cx="318" cy="92" r="15"/><circle cx="352" cy="92" r="15"/></g>
+      </svg>
+      <div class="um">
+        <button class="umbtn" id="umBtn" type="button"><span class="av" id="umAv">G</span><span id="umName">Guest</span><span>▾</span></button>
+        <div class="umenu" id="umMenu"><div class="em" id="umEmail"></div><button type="button" id="umLogout">Log out</button></div>
+      </div>
+    </header>
+
+    <!-- Dashboard -->
+    <section id="viewDash" class="pad">
+      <form id="f" class="panel searchbar">
+        <select id="type"><option value="mc">MC number</option><option value="dot">DOT number</option><option value="name">Company name</option></select>
+        <input id="q" placeholder="Enter MC, DOT or company name" required>
+        <button class="go" type="submit">🔍 Search carriers</button>
+      </form>
+      <div id="msg"></div>
+      <div id="results"></div>
+
+      <div class="bulkgrid">
+        <form id="bf" class="panel bpanel">
+          <div class="ptitle">🔍 Bulk search</div>
+          <div class="bform">
+            <select id="bmode"><option value="mc">MC range</option><option value="date">Date range (new carriers)</option></select>
+            <div id="bmc" style="display:contents"><input id="bfrom" placeholder="From MC, e.g. 500000" inputmode="numeric"><input id="bto" placeholder="To MC, e.g. 505000" inputmode="numeric"></div>
+            <div id="bdate" style="display:none"><input type="date" id="dfrom"> <input type="date" id="dto"></div>
+            <input id="bmin" type="number" min="0" placeholder="Min trucks" style="max-width:130px;flex:0 1 130px">
+            <input id="bmax" type="number" min="0" placeholder="Max trucks" style="max-width:130px;flex:0 1 130px">
+            <div class="chips" id="bequip"></div>
+            <select id="bauth"><option value="">Authority: Any</option><option value="active">Authority: Active</option><option value="inactive">Authority: Inactive</option></select>
+            <select id="bmatch"><option value="any">Any selected cargo</option><option value="all">All selected cargo</option></select>
+            <div class="chips" id="bcargo"></div>
+            <button class="go" type="submit" id="bgo">🔍 Fetch carriers</button>
+          </div>
+        </form>
+        <div class="sg" id="sg"></div>
+      </div>
+
+      <div id="bmsg"></div>
+      <div class="strip" id="bstrip" style="display:none">
+        <div class="stripstats" id="stripstats"></div>
+        <div class="tools">
+          <button id="bstop" type="button" style="display:none">⏹ Stop loading</button>
+          <button id="bmore" type="button" style="display:none">Load more</button>
+          <button id="bsave" type="button" class="btn-o">⬇ Save all to leads</button>
+          <button id="bcsv" type="button" class="btn-g">Export to Excel (CSV)</button>
+        </div>
+      </div>
+      <div class="bw" id="bres"></div>
+      <div id="pager"></div>
+    </section>
+
+    <!-- My leads -->
+    <section id="viewLeads" class="pad" style="display:none;margin-top:24px">
+      <h3>My leads</h3>
+      <div class="tools" style="margin-bottom:12px">
+        <button id="csv" type="button" class="btn-g">Download CSV</button>
+        <button id="clear" type="button">Clear all leads</button>
+      </div>
+      <div id="leads" class="bw"></div>
+    </section>
+  </div>
 </div>
-<div id="leads"></div>
-</main>
+
 <script>
-var found = [];
+/* ============ CONFIG: fill these two after creating your free Supabase project ============ */
+var CONFIG = {
+  SUPABASE_URL: 'https://ouxolslusdduddbgwwsg.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_-RDfUdZKeQ16YFU0pVX1pQ_eLWCTkg4',   // publishable (public) key
+  SUPPORT_EMAIL: ''        // optional: shows the "Contact Support" box when filled
+};
+/* ======================================================================================== */
+
 var $ = function (id) { return document.getElementById(id); };
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-function getLeads() { try { return JSON.parse(localStorage.getItem('leads') || '[]'); } catch (e) { return []; } }
-function setLeads(l) { try { localStorage.setItem('leads', JSON.stringify(l)); } catch (e) {} }
 
+/* ---------------- auth ---------------- */
+var sb = null, session = null, guest = false, appShown = false;
+var configured = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+
+function userName() {
+  if (guest || !session) return 'Guest';
+  var u = session.user || {}, m = u.user_metadata || {};
+  return m.full_name || String(u.email || 'User').split('@')[0];
+}
+function userKey() { return guest || !session ? 'guest' : session.user.id; }
+function authMsg(t, bad) { $('amsg').textContent = t || ''; $('amsg').style.color = bad ? '#dc2626' : '#15803d'; }
+function setTab(t) {
+  $('tabLogin').className = t === 'login' ? 'on' : ''; $('tabSignup').className = t === 'signup' ? 'on' : '';
+  $('fLogin').style.display = t === 'login' ? 'flex' : 'none'; $('fSignup').style.display = t === 'signup' ? 'flex' : 'none';
+  authMsg('');
+}
+function showAuth() { $('app').style.display = 'none'; $('auth').style.display = 'flex'; appShown = false; }
+function showApp() {
+  $('auth').style.display = 'none'; $('app').style.display = 'flex';
+  var n = userName();
+  $('umName').textContent = n; $('umAv').textContent = n.charAt(0).toUpperCase();
+  $('umEmail').textContent = guest || !session ? 'Not logged in' : (session.user.email || '');
+  if (!appShown) { appShown = true; showView('dash'); renderLeads(); }
+}
+function setSession(s) {
+  session = s;
+  if (s) showApp(); else if (!guest) showAuth();
+}
+function logout() {
+  guest = false;
+  if (sb) sb.auth.signOut().then(function () { session = null; showAuth(); });
+  else { session = null; showAuth(); }
+}
+function apiFetch(url) {
+  var h = {};
+  if (session && session.access_token) h.Authorization = 'Bearer ' + session.access_token;
+  return fetch(url, { headers: h }).then(function (r) {
+    if (r.status === 401 && sb) { sb.auth.signOut(); }
+    return r;
+  });
+}
+
+$('tabLogin').onclick = function () { setTab('login'); };
+$('tabSignup').onclick = function () { setTab('signup'); };
+$('guest').onclick = function () { guest = true; showApp(); };
+$('fLogin').addEventListener('submit', function (e) {
+  e.preventDefault();
+  if (!sb) { authMsg('Login is not set up yet.', true); return; }
+  authMsg('Logging in…');
+  sb.auth.signInWithPassword({ email: $('lEmail').value.trim(), password: $('lPass').value }).then(function (r) {
+    if (r.error) authMsg(r.error.message, true);
+  });
+});
+$('fSignup').addEventListener('submit', function (e) {
+  e.preventDefault();
+  if (!sb) { authMsg('Login is not set up yet.', true); return; }
+  authMsg('Creating account…');
+  sb.auth.signUp({ email: $('sEmail').value.trim(), password: $('sPass').value, options: { data: { full_name: $('sName').value.trim() } } }).then(function (r) {
+    if (r.error) { authMsg(r.error.message, true); return; }
+    if (!r.data.session) { setTab('login'); authMsg('Account created. Check your email and click the confirmation link, then log in.'); }
+  });
+});
+$('forgot').onclick = function () {
+  var em = $('lEmail').value.trim();
+  if (!sb) { authMsg('Login is not set up yet.', true); return; }
+  if (!em) { authMsg('Type your email above first.', true); return; }
+  sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin }).then(function (r) {
+    authMsg(r.error ? r.error.message : 'Password reset link sent. Check your email.', !!r.error);
+  });
+};
+$('umBtn').onclick = function (e) { e.stopPropagation(); $('umMenu').style.display = $('umMenu').style.display === 'block' ? 'none' : 'block'; };
+document.addEventListener('click', function () { $('umMenu').style.display = 'none'; });
+$('umLogout').onclick = logout;
+$('navLogout').onclick = function (e) { e.preventDefault(); logout(); };
+
+function initAuth() {
+  if (CONFIG.SUPPORT_EMAIL) { $('helpbox').style.display = 'block'; $('helplink').href = 'mailto:' + CONFIG.SUPPORT_EMAIL; }
+  if (!configured) { $('setup').style.display = 'block'; showAuth(); return; }
+  if (!window.supabase) { showAuth(); authMsg('Could not load the login library. Check your internet and refresh.', true); return; }
+  sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  sb.auth.onAuthStateChange(function (ev, s) {
+    if (ev === 'PASSWORD_RECOVERY') {
+      var p = prompt('Enter your new password (min 6 characters):');
+      if (p && p.length >= 6) sb.auth.updateUser({ password: p }).then(function (r) { alert(r.error ? r.error.message : 'Password updated.'); });
+    }
+    setSession(s);
+  });
+}
+
+/* ---------------- views ---------------- */
+function showView(v) {
+  $('viewDash').style.display = v === 'dash' ? '' : 'none';
+  $('viewLeads').style.display = v === 'leads' ? '' : 'none';
+  Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) { a.className = a.getAttribute('data-view') === v ? 'on' : ''; });
+  if (v === 'leads') renderLeads();
+}
+Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) {
+  a.addEventListener('click', function (e) { e.preventDefault(); showView(a.getAttribute('data-view')); });
+});
+
+/* ---------------- leads ---------------- */
+function leadsKey() { return 'leads_' + userKey(); }
+function getLeads() {
+  try {
+    var raw = localStorage.getItem(leadsKey());
+    if (raw == null) raw = localStorage.getItem('leads');
+    return JSON.parse(raw || '[]');
+  } catch (e) { return []; }
+}
+function setLeads(l) { try { localStorage.setItem(leadsKey(), JSON.stringify(l)); } catch (e) {} }
+function del(i) { var l = getLeads(); l.splice(i, 1); setLeads(l); renderLeads(); }
+function setStatus(i, v) { var l = getLeads(); l[i].status = v; setLeads(l); }
+function renderLeads() {
+  var l = getLeads();
+  $('leadBadge').textContent = l.length;
+  if (!l.length) { $('leads').innerHTML = '<p class="small" style="padding:16px">No leads yet. Search a carrier and choose Save lead.</p>'; return; }
+  var opts = ['New', 'Contacted', 'Interested', 'Onboarded', 'Not interested'];
+  $('leads').innerHTML = '<table><tr><th>Name</th><th>MC / DOT</th><th>Authorized</th><th>Email / Phone</th><th>Status</th><th></th></tr>' +
+    l.map(function (x, i) {
+      return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.authorized) + '</td><td>' + esc(x.email || '—') + '<br><span class="small">' + esc(x.phone || '') + '</span></td><td><select onchange="setStatus(' + i + ',this.value)">' +
+        opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
+        '</select></td><td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
+    }).join('') + '</table>';
+}
+function csvOut(rows, name) {
+  var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  a.download = name; a.click();
+}
+$('csv').onclick = function () {
+  var l = getLeads();
+  csvOut([['Name', 'MC', 'DOT', 'Address', 'Authorized', 'Common authority', 'Power units', 'Email', 'Phone', 'Officer', 'Status']].concat(
+    l.map(function (x) { return [x.name, x.mc, x.dot, x.address, x.authorized, x.common, x.units, x.email, x.phone, x.officer, x.status]; })), 'leads.csv');
+};
+$('clear').onclick = function () { if (confirm('Delete all leads?')) { setLeads([]); renderLeads(); } };
+
+/* ---------------- single carrier search ---------------- */
+var found = [];
 function ins(c) {
   var i = c.insurance;
   if (i.bipdOnFile > 0) return { t: 'On File', s: 'BIPD $' + i.bipdOnFile.toLocaleString() + 'K' + (i.bipdRequired ? ' (req. $' + i.bipdRequired + 'K)' : ''), bad: false };
   return { t: 'Not on File', s: 'No active insurance', bad: true };
 }
-
 function contact(c) {
   if (!c.censusFound) return '<div class="contact"><div class="small">No contact data found in the FMCSA Census file for this carrier.</div></div>';
   var email = c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '—';
@@ -130,11 +419,8 @@ function contact(c) {
     '<div><div class="lbl">In FMCSA census since</div><div class="val">' + esc(c.censusAddDate || '—') + '</div></div>' +
     '</div></div>';
 }
-
 function card(c, idx) {
-  var a = c.authorized;
-  var n = ins(c);
-  var inactive = c.common !== 'Active';
+  var a = c.authorized, n = ins(c), inactive = c.common !== 'Active';
   return '<div class="card"><div class="top"><div><h2>' + esc(c.name) + '</h2>' +
     '<div class="sub">Legal name: ' + esc(c.legalName) + '</div>' +
     '<div class="auth" style="color:' + (c.common === 'Active' ? '#16a34a' : '#dc2626') + '">' + (c.common === 'Active' ? '✔' : '✖') + ' Common Authority: ' + esc(c.common) + '</div></div>' +
@@ -154,14 +440,17 @@ function card(c, idx) {
     '</div>' + contact(c) +
     '<div class="act"><button type="button" onclick="save(' + idx + ')">Save lead</button></div></div>';
 }
-
+function save(i) {
+  var c = found[i], l = getLeads();
+  if (l.some(function (x) { return x.dot === c.dot; })) { alert('Already saved'); return; }
+  l.push({ dot: c.dot, mc: c.mc.join(' '), name: c.name, address: c.address, authorized: c.authorized ? 'Yes' : 'No', common: c.common, units: c.powerUnits, email: c.email || '', phone: c.phone || c.cellPhone || '', officer: c.officer1 || '', status: 'New' });
+  setLeads(l); renderLeads();
+}
 $('f').addEventListener('submit', function (e) {
   e.preventDefault();
   var q = $('q').value.trim();
-  $('msg').className = '';
-  $('msg').textContent = 'Searching…';
-  $('results').innerHTML = '';
-  fetch('/api/carrier?type=' + $('type').value + '&q=' + encodeURIComponent(q))
+  $('msg').className = ''; $('msg').textContent = 'Searching…'; $('results').innerHTML = '';
+  apiFetch('/api/carrier?type=' + $('type').value + '&q=' + encodeURIComponent(q))
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
     .then(function (x) {
       if (!x.ok) { $('msg').className = 'err'; $('msg').textContent = x.d.error || 'Error'; return; }
@@ -172,32 +461,11 @@ $('f').addEventListener('submit', function (e) {
     .catch(function () { $('msg').className = 'err'; $('msg').textContent = 'Could not reach the server. Is the site deployed with /api?'; });
 });
 
-function save(i) {
-  var c = found[i], l = getLeads();
-  if (l.some(function (x) { return x.dot === c.dot; })) { alert('Already saved'); return; }
-  l.push({ dot: c.dot, mc: c.mc.join(' '), name: c.name, address: c.address, authorized: c.authorized ? 'Yes' : 'No', common: c.common, units: c.powerUnits, email: c.email || '', phone: c.phone || c.cellPhone || '', officer: c.officer1 || '', status: 'New' });
-  setLeads(l); renderLeads();
-}
-function del(i) { var l = getLeads(); l.splice(i, 1); setLeads(l); renderLeads(); }
-function setStatus(i, v) { var l = getLeads(); l[i].status = v; setLeads(l); }
-
-function renderLeads() {
-  var l = getLeads();
-  if (!l.length) { $('leads').innerHTML = '<p class="small">No leads yet. Search a carrier and choose Save lead.</p>'; return; }
-  var opts = ['New', 'Contacted', 'Interested', 'Onboarded', 'Not interested'];
-  $('leads').innerHTML = '<table><tr><th>Name</th><th>MC / DOT</th><th>Authorized</th><th>Email / Phone</th><th>Status</th><th></th></tr>' +
-    l.map(function (x, i) {
-      return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.authorized) + '</td><td>' + esc(x.email || '—') + '<br><span class="small">' + esc(x.phone || '') + '</span></td><td><select onchange="setStatus(' + i + ',this.value)">' +
-        opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
-        '</select></td><td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
-    }).join('') + '</table>';
-}
-
+/* ---------------- bulk search ---------------- */
 var CARGO = ['General Freight','Household Goods','Metal Sheets/Coils','Motor Vehicles','Drive/Tow Away','Logs/Poles/Lumber','Building Materials','Machinery/Large Objects','Refrigerated Food','Beverages','Paper Products','Construction','Intermodal','Oilfield Equipment'];
 var EQUIP = ['Big Equipment','Power Only','Box Truck','Multi Trucks'];
 $('bcargo').innerHTML = '<span class="lbl">Cargo</span>' + CARGO.map(function (c) { return '<label><input type="checkbox" value="' + esc(c) + '"> ' + esc(c) + '</label>'; }).join('');
 $('bequip').innerHTML = '<span class="lbl">Equipment</span>' + EQUIP.map(function (c) { return '<label><input type="checkbox" value="' + esc(c) + '"> ' + esc(c) + '</label>'; }).join('');
-var bulk = [], bNext = null, bBase = '';
 $('bmode').onchange = function () {
   var m = $('bmode').value === 'mc';
   $('bmc').style.display = m ? 'contents' : 'none';
@@ -205,36 +473,95 @@ $('bmode').onchange = function () {
 };
 (function () { var t = new Date(), f = new Date(t.getTime() - 5 * 86400000); function iso(d) { return d.toISOString().slice(0, 10); } $('dfrom').value = iso(f); $('dto').value = iso(t); })();
 
+var PAGE_SIZE = 25;
+var bulk = [], bSeen = {}, bNext = null, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bPagesDone = 0, bRun = 0;
+
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
 function loc(x) { return [x.city, x.state].filter(Boolean).join(', ') || '—'; }
-
+function spark(c) {
+  var d = 'M0 28 C15 6,30 6,45 20 S75 34,90 18 S125 4,160 22';
+  return '<svg viewBox="0 0 160 36" preserveAspectRatio="none"><path d="' + d + ' L160 36 L0 36Z" fill="' + c + '" fill-opacity=".14"/><path d="' + d + '" fill="none" stroke="' + c + '" stroke-width="2"/></svg>';
+}
+function bCounts() {
+  var st = {};
+  bulk.forEach(function (x) { if (x.state) st[x.state] = 1; });
+  return {
+    n: bulk.length,
+    email: bulk.filter(function (x) { return x.email; }).length,
+    phone: bulk.filter(function (x) { return x.phone || x.cellPhone; }).length,
+    states: Object.keys(st).length
+  };
+}
+function bStatus() {
+  var t = bulk.length + ' carrier(s) found · scanned ' + bScanned.toLocaleString() + ' census records';
+  if (bLoading) t += ' · loading more (page ' + (bPagesDone + 1) + ')…';
+  else if (bNext !== null) t += ' · paused, press "Load more" to continue';
+  else if (bPagesDone) t += ' · all loaded';
+  if (bWarn.length) t += ' · ' + bWarn.join(' ');
+  $('bmsg').textContent = t;
+}
 function bRender() {
-  var withEmail = bulk.filter(function (x) { return x.email; }).length;
-  var withPhone = bulk.filter(function (x) { return x.phone || x.cellPhone; }).length;
-  var states = {};
-  bulk.forEach(function (x) { if (x.state) states[x.state] = 1; });
-  $('bstats').style.display = bulk.length ? 'grid' : 'none';
-  $('bstats').innerHTML =
-    '<div><div class="lbl">Verified carriers</div><div class="val">' + bulk.length + '</div></div>' +
-    '<div><div class="lbl">With email</div><div class="val">' + withEmail + '</div></div>' +
-    '<div><div class="lbl">With phone</div><div class="val">' + withPhone + '</div></div>' +
-    '<div><div class="lbl">States</div><div class="val">' + Object.keys(states).length + '</div></div>';
-  $('bres').innerHTML = bulk.length ? '<table><tr><th>MC</th><th>Carrier / Company</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th><th>Authority</th></tr>' +
-    bulk.map(function (x) {
+  var c = bCounts();
+  var defs = [['Verified carriers', c.n, '🚚', '#1a5fe0', '#dbe7ff'], ['With email', c.email, '✉️', '#16a34a', '#dcfce7'], ['With phone', c.phone, '📞', '#7c3aed', '#ede9fe'], ['States', c.states, '📍', '#f97316', '#ffedd5']];
+  $('sg').innerHTML = defs.map(function (d) {
+    return '<div class="sc"><div class="row"><div class="ic" style="background:' + d[4] + '">' + d[2] + '</div><div><div class="n">' + d[1] + '</div><div class="t">' + d[0] + '</div></div></div>' + spark(d[3]) + '</div>';
+  }).join('');
+  $('stripstats').innerHTML = defs.map(function (d) { return '<div class="ss"><div class="lbl">' + d[0] + '</div><div class="v">' + d[1] + '</div></div>'; }).join('');
+  $('bstrip').style.display = bulk.length || bNext !== null || bLoading ? 'flex' : 'none';
+  $('bstop').style.display = bLoading ? '' : 'none';
+  $('bmore').style.display = bNext !== null && !bLoading ? '' : 'none';
+  $('bgo').disabled = bLoading;
+
+  var pages = Math.max(1, Math.ceil(bulk.length / PAGE_SIZE));
+  if (bPage > pages) bPage = pages;
+  var slice = bulk.slice((bPage - 1) * PAGE_SIZE, bPage * PAGE_SIZE);
+  $('bres').innerHTML = bulk.length ? '<table><thead><tr><th>MC</th><th>Carrier / Company</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th><th>Authority</th></tr></thead><tbody>' +
+    slice.map(function (x) {
       return '<tr><td class="mono">' + esc(x.mc || '—') + '</td><td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '—') + '</td><td>' + esc(loc(x)) + '</td><td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td><td><span class="au au-' + esc(x.authority || 'Unknown') + '">' + esc(x.authority || 'Unknown') + '</span></td></tr>';
-    }).join('') + '</table>' : '';
-  $('btools').style.display = bulk.length || bNext !== null ? 'flex' : 'none';
-  $('bmore').style.display = bNext !== null ? '' : 'none';
+    }).join('') + '</tbody></table>' : '';
+  // pagination
+  if (pages <= 1) { $('pager').innerHTML = ''; }
+  else {
+    var start = Math.max(1, Math.min(bPage - 2, pages - 4)), end = Math.min(pages, start + 4), h = '';
+    h += '<button class="pg" type="button" onclick="goPage(' + (bPage - 1) + ')"' + (bPage === 1 ? ' disabled' : '') + '>‹</button>';
+    for (var p = start; p <= end; p++) h += '<button class="pg' + (p === bPage ? ' on' : '') + '" type="button" onclick="goPage(' + p + ')">' + p + '</button>';
+    h += '<button class="pg" type="button" onclick="goPage(' + (bPage + 1) + ')"' + (bPage === pages ? ' disabled' : '') + '>›</button>';
+    h += '<span class="small" style="align-self:center">' + pages + ' pages</span>';
+    $('pager').innerHTML = h;
+  }
+  bStatus();
+}
+function goPage(n) { bPage = n; bRender(); var el = $('bres'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+function bFinish() {
+  bLoading = false;
+  if (bNext === null && /mode=mc/.test(bBase)) bulk.sort(function (a, b) { return String(a.mc).localeCompare(String(b.mc)); });
+  bRender();
 }
 function runBulk(offset) {
-  $('bmsg').className = ''; $('bmsg').textContent = 'Fetching… this can take a few seconds';
-  fetch(bBase + '&offset=' + offset).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
-    if (!x.ok) { $('bmsg').className = 'err'; $('bmsg').textContent = x.d.error || 'Error'; return; }
-    bulk = offset ? bulk.concat(x.d.rows) : x.d.rows;
-    bNext = x.d.nextOffset;
-    $('bmsg').textContent = bulk.length + ' carrier(s) found' + (bNext !== null ? ' — more records available, press "Load more".' : '.') + (x.d.warnings && x.d.warnings.length ? ' ' + x.d.warnings.join(' ') : '');
-    bRender();
-  }).catch(function () { $('bmsg').className = 'err'; $('bmsg').textContent = 'Could not reach the server. Is api/bulk.js deployed?'; });
+  var myRun = bRun;
+  bLoading = true; $('bmsg').className = ''; bRender();
+  apiFetch(bBase + '&offset=' + offset)
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (x) {
+      if (myRun !== bRun) return;
+      if (!x.ok) {
+        bLoading = false; bRender();
+        $('bmsg').className = 'err';
+        $('bmsg').textContent = (x.d.error || 'Error') + (offset ? ' — press "Load more" to continue.' : '');
+        return;
+      }
+      (x.d.rows || []).forEach(function (r) { var k = r.dot + '|' + r.mc; if (!bSeen[k]) { bSeen[k] = 1; bulk.push(r); } });
+      bScanned += x.d.scanned || 0; bPagesDone++;
+      bNext = x.d.nextOffset;
+      (x.d.warnings || []).forEach(function (w) { if (bWarn.indexOf(w) === -1) bWarn.push(w); });
+      if (bNext !== null && !bStop) { bRender(); runBulk(bNext); } else bFinish();
+    })
+    .catch(function () {
+      if (myRun !== bRun) return;
+      bLoading = false; if (bNext === null && offset) bNext = offset; bRender();
+      $('bmsg').className = 'err'; $('bmsg').textContent = 'Connection problem. Press "Load more" to continue.';
+    });
 }
 function checked(id) {
   return Array.prototype.map.call($(id).querySelectorAll('input:checked'), function (i) { return i.value; }).join('|');
@@ -245,40 +572,27 @@ $('bf').addEventListener('submit', function (e) {
   bBase = '/api/bulk?mode=' + m + '&from=' + encodeURIComponent(m === 'mc' ? $('bfrom').value : $('dfrom').value) + '&to=' + encodeURIComponent(m === 'mc' ? $('bto').value : $('dto').value) +
     '&min=' + encodeURIComponent($('bmin').value) + '&max=' + encodeURIComponent($('bmax').value) +
     '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=' + $('bauth').value + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo'));
-  bulk = []; bNext = null; bRender(); runBulk(0);
+  bRun++; bulk = []; bSeen = {}; bNext = null; bScanned = 0; bPagesDone = 0; bWarn = []; bStop = false; bPage = 1;
+  runBulk(0);
 });
-$('bmore').onclick = function () { if (bNext !== null) runBulk(bNext); };
+$('bstop').onclick = function () { bStop = true; $('bstop').style.display = 'none'; };
+$('bmore').onclick = function () { if (bNext !== null && !bLoading) { bStop = false; runBulk(bNext); } };
 $('bsave').onclick = function () {
   var l = getLeads(), n = 0;
   bulk.forEach(function (c) {
     if (l.some(function (x) { return x.dot === c.dot; })) return;
-    l.push({ dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New' });
+    l.push({ dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: c.authority || '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New' });
     n++;
   });
   setLeads(l); renderLeads(); alert(n + ' new leads saved.');
 };
 $('bcsv').onclick = function () {
-  var rows = [['MC', 'USDOT', 'Company', 'DBA', 'Phone', 'Cell', 'Email', 'Officer', 'City', 'State', 'Equipment', 'Authority', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
-    bulk.map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.phone, x.cellPhone, x.email, x.officer, x.city, x.state, x.equipment, x.authority, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; }));
-  var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' }));
-  a.download = 'bulk-carriers.csv';
-  a.click();
+  csvOut([['MC', 'USDOT', 'Company', 'DBA', 'Phone', 'Cell', 'Email', 'Officer', 'City', 'State', 'Equipment', 'Authority', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
+    bulk.map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.phone, x.cellPhone, x.email, x.officer, x.city, x.state, x.equipment, x.authority, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; })), 'bulk-carriers.csv');
 };
 
-$('csv').onclick = function () {
-  var l = getLeads();
-  var rows = [['Name', 'MC', 'DOT', 'Address', 'Authorized', 'Common authority', 'Power units', 'Email', 'Phone', 'Officer', 'Status']].concat(
-    l.map(function (x) { return [x.name, x.mc, x.dot, x.address, x.authorized, x.common, x.units, x.email, x.phone, x.officer, x.status]; }));
-  var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' }));
-  a.download = 'leads.csv';
-  a.click();
-};
-$('clear').onclick = function () { if (confirm('Delete all leads?')) { setLeads([]); renderLeads(); } };
-renderLeads();
+bRender();
+initAuth();
 </script>
 </body>
 </html>
