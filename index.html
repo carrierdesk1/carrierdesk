@@ -92,7 +92,7 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .btn-g{border-color:#16a34a;color:#15803d;background:#f0fdf4}
 .bw{overflow-x:auto;margin-top:14px;border-radius:14px;box-shadow:0 6px 20px rgba(15,23,42,.08)}
 table{width:100%;border-collapse:collapse;background:#fff;font-size:14px}
-.bw table{min-width:980px;font-size:13px}
+.bw table{min-width:1100px;font-size:13px}
 .bw th{background:var(--head);color:#fff;font-size:12px;letter-spacing:.05em;text-transform:uppercase}
 th,td{padding:12px;border-bottom:1px solid var(--line);text-align:left}
 .bw tbody tr:nth-child(even) td{background:#f8fafc}
@@ -548,9 +548,9 @@ function bRender() {
   var pages = Math.max(1, Math.ceil(bulk.length / PAGE_SIZE));
   if (bPage > pages) bPage = pages;
   var slice = bulk.slice((bPage - 1) * PAGE_SIZE, bPage * PAGE_SIZE);
-  $('bres').innerHTML = bulk.length ? '<table><thead><tr><th>MC</th><th>Carrier / Company</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th><th>Authority</th></tr></thead><tbody>' +
+  $('bres').innerHTML = bulk.length ? '<table><thead><tr><th>MC</th><th>Carrier / Company</th><th>Officer</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th><th>Authority</th></tr></thead><tbody>' +
     slice.map(function (x) {
-      return '<tr><td class="mono">' + esc(x.mc || '—') + '</td><td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '—') + '</td><td>' + esc(loc(x)) + '</td><td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td><td>' + (x.authority ? '<span class="au au-' + esc(x.authority) + '">' + esc(x.authority) + '</span>' : '<span class="au au-wait">…</span>') + '</td></tr>';
+      return '<tr><td class="mono">' + esc(x.mc || '—') + '</td><td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td><td>' + esc(x.officer || '—') + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '—') + '</td><td>' + esc(loc(x)) + '</td><td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td><td>' + (x.authority ? '<span class="au au-' + esc(x.authority) + '">' + esc(x.authority) + '</span>' : '<span class="au au-wait">…</span>') + '</td></tr>';
     }).join('') + '</tbody></table>' : '';
   // pagination
   if (pages <= 1) { $('pager').innerHTML = ''; }
