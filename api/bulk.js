@@ -2,7 +2,7 @@
 // GET /api/bulk?mode=mc&from=500000&to=505000
 // GET /api/bulk?mode=date&from=2026-11-05&to=2026-11-10
 // Optional: min, max (power units), equip=Big Equipment|Power Only|Box Truck|Multi Trucks,
-//           cargo=General Freight|Household Goods, match=any|all, offset
+//           cargo=General Freight|Household Goods, match=any|all, auth=active|inactive, offset
 // Debug:    /api/bulk?debug=1
 const DATASET = 'az4n-8mr2';
 const CENSUS = 'https://data.transportation.gov/resource/' + DATASET + '.json';
@@ -73,6 +73,92 @@ const fmtPhone = (v) => {
 };
 const nextDay = (iso) => new Date(Date.parse(iso + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
 
+// ---- Authority status (Active / Inactive) from FMCSA "Motus Carrier - All With History" ----
+const MOTUS = 'https://data.transportation.gov/resource/inys-ebih.json';
+const MOTUS_META = 'https://data.transportation.gov/api/views/inys-ebih.json';
+let motusKeyCache = null;
+
+async function sodaAt(base, params, ms) {
+  const qs = Object.keys(params)
+    .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
+    .join('&');
+  const r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000) });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error('Motus API status ' + r.status + (t ? ': ' + t.slice(0, 150) : ''));
+  }
+  return r.json();
+}
+
+async function getMotusKeys() {
+  if (motusKeyCache && motusKeyCache.length) return motusKeyCache;
+  try {
+    const r = await fetch(MOTUS_META, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) {
+      const m = await r.json();
+      const k = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
+      if (k.length) motusKeyCache = k;
+    }
+  } catch (e) { /* ignore */ }
+  return motusKeyCache || [];
+}
+
+const stripZeros = (v) => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
+
+async function loadAuthority(dots, warnings) {
+  const out = { ok: false, map: {}, statusCol: '', typeCol: '' };
+  if (!dots.length) return out;
+  const keys = await getMotusKeys();
+  const dotCol = ['usdot_number', 'dot_number'].find((k) => keys.indexOf(k) !== -1);
+  out.statusCol = keys.indexOf('op_auth_status') !== -1 ? 'op_auth_status' : (keys.find((k) => /auth.*stat/i.test(k)) || '');
+  out.typeCol = keys.indexOf('op_auth_type') !== -1 ? 'op_auth_type' : (keys.find((k) => /auth.*type/i.test(k)) || '');
+  if (!dotCol || !out.statusCol) {
+    warnings.push('Authority columns not found in Motus Carrier dataset, so authority is not shown. Open /api/bulk?debug=1.');
+    return out;
+  }
+  const select = [dotCol, 'docket_number', out.typeCol, out.statusCol].filter((k) => k && keys.indexOf(k) !== -1).join(',');
+  const uniq = Array.from(new Set(dots.map(stripZeros).filter(Boolean)));
+  const groups = [];
+  for (let i = 0; i < uniq.length; i += 120) groups.push(uniq.slice(i, i + 120));
+  try {
+    const results = await Promise.all(groups.map((g) => {
+      const vals = [];
+      g.forEach((d) => { vals.push("'" + d + "'"); vals.push("'" + d.padStart(8, '0') + "'"); });
+      return sodaAt(MOTUS, { $select: select, $where: dotCol + ' in (' + vals.join(',') + ')', $limit: 5000 }, 8000);
+    }));
+    results.forEach((rows) => rows.forEach((r) => {
+      const k = stripZeros(r[dotCol]);
+      if (!k) return;
+      (out.map[k] = out.map[k] || []).push(r);
+    }));
+    out.ok = Object.keys(out.map).length > 0;
+    if (!out.ok) warnings.push('No authority rows found in Motus Carrier dataset for these carriers, authority not shown.');
+  } catch (e) {
+    warnings.push('Authority lookup failed (' + (e.message || e) + '), authority not shown.');
+  }
+  return out;
+}
+
+function statusOf(list, mcDigits, statusCol, typeCol) {
+  let rows = list;
+  if (mcDigits) {
+    const m = list.filter((r) => stripZeros(r.docket_number) === mcDigits);
+    if (m.length) rows = m;
+  }
+  if (typeCol) {
+    const carr = rows.filter((r) => !/broker|forwarder/i.test(String(r[typeCol] || '')));
+    if (carr.length) rows = carr;
+  }
+  let a = false, p = false, i = false;
+  rows.forEach((r) => {
+    const s = String(r[statusCol] || '');
+    if (/inactive|revok|cancel|terminat|dismiss|withdraw|expire/i.test(s)) i = true;
+    else if (/active|grant/i.test(s)) a = true;
+    else if (/pend/i.test(s)) p = true;
+  });
+  return a ? 'Active' : p ? 'Pending' : i ? 'Inactive' : 'Unknown';
+}
+
 // Equipment label worked out from the fleet counts in the Census file
 function equipmentOf(tractors, trucks, trailers, units) {
   if (tractors > 0 && trailers > 0) return 'Big Equipment';
@@ -91,7 +177,9 @@ module.exports = async (req, res) => {
 
     if (req.query.debug) {
       const sample = await soda({ $limit: 1, $where: 'email_address IS NOT NULL' }).catch(() => []);
-      return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null });
+      const motusColumns = await getMotusKeys();
+      const motusSample = await sodaAt(MOTUS, { $limit: 2 }, 6000).catch((e) => String(e.message || e));
+      return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null, motusColumns: motusColumns, motusSample: motusSample });
     }
 
     const mode = String(req.query.mode || 'mc');
@@ -233,11 +321,28 @@ module.exports = async (req, res) => {
       });
     });
 
-    if (mode === 'mc') rows.sort((a, b) => a.mc.localeCompare(b.mc));
+    // Authority status per carrier
+    const authWanted = String(req.query.auth || '').toLowerCase();
+    const au = await loadAuthority(rows.map((r) => r.dot), warnings);
+    rows.forEach((r) => {
+      const list = au.ok ? (au.map[stripZeros(r.dot)] || []) : [];
+      r.authority = list.length ? statusOf(list, stripZeros(r.mc), au.statusCol, au.typeCol) : 'Unknown';
+      if (!r.mc && list.length) {
+        const d = list.find((x) => /^MC/i.test(String(x.docket_number || '')));
+        if (d) r.mc = String(d.docket_number).toUpperCase();
+      }
+    });
+    let outRows = rows;
+    if (authWanted) {
+      if (au.ok) outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted);
+      else warnings.push('Authority filter ignored because authority data could not be loaded.');
+    }
+
+    if (mode === 'mc') outRows.sort((a, b) => a.mc.localeCompare(b.mc));
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
-      rows: rows,
+      rows: outRows,
       scanned: raw.length,
       nextOffset: raw.length === PAGE ? offset + PAGE : null,
       warnings: warnings
