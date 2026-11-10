@@ -3,7 +3,9 @@
 // GET /api/bulk?mode=date&from=2026-11-05&to=2026-11-10
 // Optional: min, fleet=straight|tractor, cargo=General Freight|Household Goods, match=any|all, offset
 // Debug:    /api/bulk?debug=1  (shows the real column names of the Census file)
-const CENSUS = 'https://data.transportation.gov/resource/az4n-8mr2.json';
+const DATASET = 'az4n-8mr2';
+const CENSUS = 'https://data.transportation.gov/resource/' + DATASET + '.json';
+const META = 'https://data.transportation.gov/api/views/' + DATASET + '.json';
 const PAGE = 1000;
 
 // Label shown on the site -> text found inside the Census cargo column name
@@ -38,11 +40,31 @@ async function soda(params) {
   return r.json();
 }
 
+// The SODA JSON API leaves out null fields, so a single row does NOT show every column.
+// Read the full column list from the dataset metadata instead.
 async function getKeys() {
-  if (keyCache) return keyCache;
-  const rows = await soda({ $limit: 1 });
-  keyCache = rows[0] ? Object.keys(rows[0]) : [];
-  return keyCache;
+  if (keyCache && keyCache.length) return keyCache;
+  let keys = [];
+  try {
+    const r = await fetch(META, { signal: AbortSignal.timeout(6000) });
+    if (r.ok) {
+      const m = await r.json();
+      keys = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
+    }
+  } catch (e) { /* fall through to sampling */ }
+
+  if (!keys.length) {
+    // Fallback: union of keys over many rows, including rows that have a docket
+    const set = {};
+    const batches = await Promise.all([
+      soda({ $limit: 200 }).catch(() => []),
+      soda({ $limit: 200, $where: 'docket1 IS NOT NULL' }).catch(() => [])
+    ]);
+    batches.forEach((rows) => rows.forEach((row) => Object.keys(row).forEach((k) => { set[k] = 1; })));
+    keys = Object.keys(set);
+  }
+  keyCache = keys;
+  return keys;
 }
 
 const yes = (v) => v != null && String(v).trim() !== '' && !/^(n|no|false|0)$/i.test(String(v).trim());
@@ -60,8 +82,8 @@ module.exports = async (req, res) => {
     const has = (k) => keys.indexOf(k) !== -1;
 
     if (req.query.debug) {
-      const sample = await soda({ $limit: 1, $where: "email_address IS NOT NULL" }).catch(() => []);
-      return res.status(200).json({ columns: keys, sample: sample[0] || null });
+      const sample = await soda({ $limit: 1, $where: 'email_address IS NOT NULL' }).catch(() => []);
+      return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null });
     }
 
     const mode = String(req.query.mode || 'mc');
