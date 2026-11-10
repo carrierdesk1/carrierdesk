@@ -153,6 +153,13 @@ tr.due td{background:#fef9c3!important}
 #eprev{white-space:pre-wrap;background:#f8fafc;border:1px dashed var(--line);border-radius:10px;padding:12px;font-size:13px;max-height:200px;overflow:auto}
 .mrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
 .mrow label{display:flex;align-items:center;gap:6px;font-size:13px}.mrow input[type=checkbox]{min-width:0;width:16px;height:16px;padding:0}
+.tc{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+.tc .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.tc .where{font-size:22px;font-weight:800}
+.tc .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tc .acts button,.tc .acts a.btnlike{padding:8px 12px;font-size:13px}
+.tc .upd{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tc .upd input{min-width:0;padding:8px 10px}
+a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:600;color:var(--ink);display:inline-block}
+.fresh{background:#dcfce7;color:#15803d}.stale{background:#fef3c7;color:#b45309}.old{background:#f1f5f9;color:#64748b}
 @media(max-width:560px){#bcargo{grid-template-columns:1fr}}
 @media(max-width:1100px){.bulkgrid{grid-template-columns:1fr}.hero .truck{display:none}}
 @media(max-width:820px){
@@ -199,6 +206,7 @@ tr.due td{background:#fef9c3!important}
     <nav>
       <a href="#" data-view="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Dashboard</a>
       <a href="#" data-view="leads"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>My Leads<span class="bd" id="leadBadge">0</span></a>
+      <a href="#" data-view="track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Carrier Tracker</a>
       <a href="#" id="navLogout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Logout</a>
     </nav>
     <div class="sp"></div>
@@ -277,6 +285,21 @@ tr.due td{background:#fef9c3!important}
       </div>
       <div class="bw" id="bres"></div>
       <div id="pager"></div>
+    </section>
+
+    <!-- Carrier tracker -->
+    <section id="viewTrack" class="pad" style="display:none;margin-top:24px">
+      <h3>Carrier Tracker</h3>
+      <div class="notice">FMCSA has no live GPS data. Here you track a carrier with <b>their permission</b>: ask them to share their live location or ZIP code, save it, and you will see which state they are in and how fresh the update is.</div>
+      <form id="tf" class="panel searchbar">
+        <select id="ttype"><option value="mc">MC number</option><option value="dot">DOT number</option><option value="name">Company name</option></select>
+        <input id="tq" placeholder="Enter MC, DOT or company name" required>
+        <button class="go" type="submit">🔍 Find carrier</button>
+      </form>
+      <div id="tmsg"></div>
+      <div id="tfound"></div>
+      <h3 style="margin-top:22px">Tracked carriers</h3>
+      <div id="tlist"></div>
     </section>
 
     <!-- My leads -->
@@ -419,8 +442,10 @@ function initAuth() {
 function showView(v) {
   $('viewDash').style.display = v === 'dash' ? '' : 'none';
   $('viewLeads').style.display = v === 'leads' ? '' : 'none';
+  $('viewTrack').style.display = v === 'track' ? '' : 'none';
   Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) { a.className = a.getAttribute('data-view') === v ? 'on' : ''; });
   if (v === 'leads') renderLeads();
+  if (v === 'track') tRender();
 }
 Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) {
   a.addEventListener('click', function (e) { e.preventDefault(); showView(a.getAttribute('data-view')); });
@@ -563,8 +588,8 @@ $('bmode').onchange = function () {
 var PAGE_SIZE = 500;
 var bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
-var bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
-var FETCH_CONC = 5, AUTH_CONC = 3, AUTH_CHUNK = 200;
+var bNote = '', bNoteNext = '', bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
+var FETCH_CONC = 5, AUTH_CONC = 4, AUTH_CHUNK = 60;
 
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
 function loc(x) { return [x.city, x.state].filter(Boolean).join(', ') || '—'; }
@@ -572,13 +597,14 @@ function spark(c) {
   var d = 'M0 28 C15 6,30 6,45 20 S75 34,90 18 S125 4,160 22';
   return '<svg viewBox="0 0 160 36" preserveAspectRatio="none"><path d="' + d + ' L160 36 L0 36Z" fill="' + c + '" fill-opacity=".14"/><path d="' + d + '" fill="none" stroke="' + c + '" stroke-width="2"/></svg>';
 }
-function bCounts() {
+function bCounts(list) {
+  list = list || bulk;
   var st = {};
-  bulk.forEach(function (x) { if (x.state) st[x.state] = 1; });
+  list.forEach(function (x) { if (x.state) st[x.state] = 1; });
   return {
-    n: bulk.length,
-    email: bulk.filter(function (x) { return x.email; }).length,
-    phone: bulk.filter(function (x) { return x.phone || x.cellPhone; }).length,
+    n: list.length,
+    email: list.filter(function (x) { return x.email; }).length,
+    phone: list.filter(function (x) { return x.phone || x.cellPhone; }).length,
     states: Object.keys(st).length
   };
 }
@@ -592,6 +618,7 @@ function bStatus() {
   if (bulk.length && (bInsQ.length || bInsActive)) t += ' · checking insurance…';
   if (bViewN !== bulk.length) t += ' · showing ' + bViewN.toLocaleString() + ' after filters';
   if (bDrop.units || bDrop.equip || bDrop.cargo || bDrop.auth) t += ' · removed by your filters → trucks: ' + bDrop.units + ', equipment: ' + bDrop.equip + ', cargo: ' + bDrop.cargo + ', authority: ' + bDrop.auth;
+  if (bNote) t += ' · ' + bNote;
   if (bWarn.length) t += ' · ' + bWarn.join(' ');
   $('bmsg').textContent = t;
 }
@@ -617,11 +644,12 @@ function bSortVal(x, k) {
   return '';
 }
 function bView(lm) {
-  var hide = $('bhide').checked, insOn = $('bins').value === 'on';
+  var hide = $('bhide').checked, insOn = $('bins').value === 'on', aw = $('bauth').value;
   var v = bulk.filter(function (x) {
     x._lead = lm[x.dot] || '';
     if (hide && x._lead) return false;
     if (insOn && x.ins === 'None') return false;
+    if (aw && x.authority && x.authority.toLowerCase() !== aw) return false;
     return true;
   });
   var k = bSort.k, d = bSort.d;
@@ -651,7 +679,8 @@ function bTargets() {
   return bView(bLeadMap());
 }
 function bRender() {
-  var c = bCounts();
+  var lm = bLeadMap(), view = bView(lm);
+  var c = bCounts(view);
   var defs = [['Verified carriers', c.n, '🚚', '#1a5fe0', '#dbe7ff'], ['With email', c.email, '✉️', '#16a34a', '#dcfce7'], ['With phone', c.phone, '📞', '#7c3aed', '#ede9fe'], ['States', c.states, '📍', '#f97316', '#ffedd5']];
   $('sg').innerHTML = defs.map(function (d) {
     return '<div class="sc"><div class="row"><div class="ic" style="background:' + d[4] + '">' + d[2] + '</div><div><div class="n">' + d[1] + '</div><div class="t">' + d[0] + '</div></div></div>' + spark(d[3]) + '</div>';
@@ -662,11 +691,10 @@ function bRender() {
   $('bmore').style.display = bQueue.length && !bLoading ? '' : 'none';
   $('bgo').disabled = bLoading;
 
-  var lm = bLeadMap(), view = bView(lm);
   bViewN = view.length;
   var showIns = bInsWanted();
   var showSafe = bulk.some(function (x) { return x.safety; });
-  var showCr = bulk.some(function (x) { return x.crashes !== '' && x.crashes != null; });
+  var showCr = bulk.some(function (x) { return Number(x.crashes) > 0; });
   var pages = Math.max(1, Math.ceil(view.length / PAGE_SIZE));
   if (bPage > pages) bPage = pages;
   var slice = view.slice((bPage - 1) * PAGE_SIZE, bPage * PAGE_SIZE);
@@ -732,6 +760,12 @@ function bAddRows(d) {
   bAuthPump(); bInsPump();
 }
 // Authority (Active/Inactive) is fetched in the background in small batches, so rows show up immediately.
+function bAuthRetry(chunk) {
+  if (!chunk.length || chunk[0]._ar) return false;
+  chunk.forEach(function (r) { r._ar = 1; });
+  bAuthQ = chunk.concat(bAuthQ);
+  return true;
+}
 function bAuthPump() {
   var run = bRun;
   while (bAuthActive < AUTH_CONC && bAuthQ.length) {
@@ -742,11 +776,13 @@ function bAuthPump() {
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (run !== bRun) return;
+          var failed = (d.warnings || []).some(function (w) { return /lookup failed/i.test(w); });
+          if (failed && bAuthRetry(chunk)) return;
           var a = d.auth || {};
           chunk.forEach(function (r) { var v = a[r.dot]; r.authority = v ? v.status : 'Unknown'; if (!r.mc && v && v.mc) r.mc = v.mc; });
           (d.warnings || []).forEach(function (w) { if (bWarn.indexOf(w) === -1) bWarn.push(w); });
         })
-        .catch(function () { if (run === bRun) chunk.forEach(function (r) { r.authority = 'Unknown'; }); })
+        .catch(function () { if (run === bRun && !bAuthRetry(chunk)) chunk.forEach(function (r) { r.authority = 'Unknown'; }); })
         .then(function () { if (run !== bRun) return; bAuthActive--; bSoon(); bAuthPump(); });
     })(bAuthQ.splice(0, AUTH_CHUNK));
   }
@@ -824,11 +860,11 @@ $('bf').addEventListener('submit', function (e) {
   var m = $('bmode').value;
   bBase = '/api/bulk?mode=' + m + '&from=' + encodeURIComponent(m === 'mc' ? $('bfrom').value : $('dfrom').value) + '&to=' + encodeURIComponent(m === 'mc' ? $('bto').value : $('dto').value) +
     '&min=' + encodeURIComponent($('bmin').value) + '&max=' + encodeURIComponent($('bmax').value) +
-    '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=' + $('bauth').value + '&noauth=' + ($('bauth').value ? '0' : '1') + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo')) +
+    '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=&noauth=1' + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo')) +
     '&state=' + encodeURIComponent($('bstate').value) + '&city=' + encodeURIComponent($('bcity').value) +
     '&hasemail=' + ($('bhasemail').checked ? '1' : '0') + '&hasphone=' + ($('bhasphone').checked ? '1' : '0');
   bRun++; bulk = []; bSeen = {}; bQueue = []; bActive = 0; bDone = 0; bTotal = null; bPlain = false;
-  bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
+  bNote = bNoteNext; bNoteNext = ''; bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
   bStart();
 });
 $('bstop').onclick = function () { bStop = true; $('bstop').style.display = 'none'; };
@@ -852,6 +888,7 @@ $('bcsv').onclick = function () {
 $('bselall').onclick = function () { bView(bLeadMap()).forEach(function (x) { bSel[x._k] = 1; }); bRender(); };
 $('bselnone').onclick = function () { bSel = {}; bRender(); };
 $('bhide').addEventListener('change', function () { bPage = 1; bRender(); });
+$('bauth').addEventListener('change', function () { bPage = 1; bRender(); });
 $('bins').addEventListener('change', function () {
   if (bInsWanted()) { bulk.forEach(function (r) { if (!r.ins && !r._iq) { r._iq = 1; bInsQ.push(r); } }); bInsPump(); }
   bPage = 1; bRender();
@@ -898,11 +935,25 @@ Array.prototype.forEach.call(document.querySelectorAll('#bdate [data-d]'), funct
 function isoLocal(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 $('bnew').onclick = function () {
   if (bLoading) { alert('Wait for the current search to finish (or press Stop loading).'); return; }
-  var t = new Date(), y = new Date(t.getTime() - 86400000);
-  $('bmode').value = 'date'; $('bmode').onchange();
-  $('dfrom').value = isoLocal(y); $('dto').value = isoLocal(t);
-  $('bauth').value = ''; $('bins').value = '';
-  $('bgo').click();
+  $('bmsg').className = ''; $('bmsg').textContent = 'Checking the newest date in the FMCSA census file…';
+  function go(from, to, note) {
+    $('bmode').value = 'date'; $('bmode').onchange();
+    $('dfrom').value = from; $('dto').value = to;
+    $('bauth').value = ''; $('bins').value = '';
+    bNoteNext = note || '';
+    $('bgo').click();
+  }
+  var t = new Date(), from = isoLocal(new Date(t.getTime() - 86400000)), to = isoLocal(t);
+  apiFetch('/api/bulk?mode=latest')
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (x) {
+      var latest = x.ok && x.d && /^\d{4}-\d{2}-\d{2}$/.test(x.d.latest || '') ? x.d.latest : '';
+      if (latest && latest < from) {
+        var f = new Date(Date.parse(latest + 'T00:00:00Z') - 2 * 86400000).toISOString().slice(0, 10);
+        go(f, latest, 'The census file only has carriers added up to ' + latest + ' (FMCSA does not update it daily), so the newest 3 days are shown.');
+      } else go(from, to, '');
+    })
+    .catch(function () { go(from, to, ''); });
 };
 
 /* ---------------- email carriers ---------------- */
@@ -971,6 +1022,92 @@ $('ereset').onclick = function () { $('esub').value = DEF_TPL.subject; $('ebody'
 $('eclose').onclick = function () { saveTpl(); $('emo').style.display = 'none'; bRender(); };
 $('esub').addEventListener('input', eRefresh);
 $('ebody').addEventListener('input', eRefresh);
+
+/* ---------------- carrier tracker (location the carrier shares) ---------------- */
+var tFound = [];
+function tKey() { return 'track_' + userKey(); }
+function getTrack() { try { return JSON.parse(localStorage.getItem(tKey()) || '[]'); } catch (e) { return []; } }
+function setTrack(l) { try { localStorage.setItem(tKey(), JSON.stringify(l)); } catch (e) {} }
+function tAgo(ts) {
+  var m = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (m < 60) return m + ' min ago';
+  if (m < 1440) return Math.round(m / 60) + ' h ago';
+  return Math.round(m / 1440) + ' d ago';
+}
+function tPhoneDigits(p) { var d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? '1' + d : d; }
+function tMsg() {
+  return 'Hi, this is Jax from M&H Dispatch Solutions. Could you please share your current location? On WhatsApp: tap the + (attach) icon, choose Location, then Share live location. Or just reply with your current ZIP code. Thank you!';
+}
+$('tf').addEventListener('submit', function (e) {
+  e.preventDefault();
+  $('tmsg').className = ''; $('tmsg').textContent = 'Searching…'; $('tfound').innerHTML = '';
+  apiFetch('/api/carrier?type=' + $('ttype').value + '&q=' + encodeURIComponent($('tq').value.trim()))
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (x) {
+      if (!x.ok) { $('tmsg').className = 'err'; $('tmsg').textContent = x.d.error || 'Error'; return; }
+      tFound = x.d.results || [];
+      $('tmsg').textContent = tFound.length ? tFound.length + ' result(s)' : 'No carrier found.';
+      $('tfound').innerHTML = tFound.map(function (c, i) {
+        return '<div class="tc"><div class="row"><div><b>' + esc(c.name) + '</b><div class="small">MC ' + esc((c.mc || []).join(', ') || '—') + ' · DOT ' + esc(c.dot) + ' · ' + esc(c.phone || c.cellPhone || 'no phone') + '</div><div class="small">' + esc(c.address || '') + '</div></div><button type="button" class="go" onclick="tAdd(' + i + ')">➕ Track this carrier</button></div></div>';
+      }).join('');
+    })
+    .catch(function () { $('tmsg').className = 'err'; $('tmsg').textContent = 'Could not reach the server.'; });
+});
+function tAdd(i) {
+  var c = tFound[i], l = getTrack();
+  if (!c) return;
+  if (l.some(function (x) { return x.dot === c.dot; })) { alert('Already in your tracker.'); return; }
+  l.unshift({ dot: c.dot, mc: (c.mc || []).join(' '), name: c.name, phone: c.phone || c.cellPhone || '', address: c.address || '', hist: [] });
+  setTrack(l); tRender();
+}
+function tDel(i) { if (!confirm('Remove this carrier from the tracker?')) return; var l = getTrack(); l.splice(i, 1); setTrack(l); tRender(); }
+function tCopy(i) {
+  var t = tMsg();
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { alert('Message copied.'); });
+  else prompt('Copy this message:', t);
+}
+function tSave(i) {
+  var zip = $('tz' + i).value.trim(), note = $('tn' + i).value.trim();
+  if (!/^\d{5}$/.test(zip)) { alert('Enter a 5-digit ZIP code.'); return; }
+  function store(city, state) {
+    var l = getTrack();
+    if (!l[i]) return;
+    l[i].hist = l[i].hist || [];
+    l[i].hist.unshift({ t: Date.now(), zip: zip, city: city, state: state, note: note });
+    l[i].hist = l[i].hist.slice(0, 50);
+    setTrack(l); tRender();
+  }
+  fetch('https://api.zippopotam.us/us/' + zip)
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      var p = d && d.places && d.places[0];
+      if (!p) alert('ZIP code not found. Saved without city and state.');
+      store(p ? p['place name'] : '', p ? p['state abbreviation'] : '');
+    })
+    .catch(function () { alert('Could not look up the ZIP code. Saved without city and state.'); store('', ''); });
+}
+function tRender() {
+  var l = getTrack();
+  if (!l.length) { $('tlist').innerHTML = '<p class="small">No carriers tracked yet. Find a carrier above and press Track.</p>'; return; }
+  $('tlist').innerHTML = l.map(function (x, i) {
+    var last = x.hist && x.hist[0], age = last ? (Date.now() - last.t) / 3600000 : 0;
+    var cls = !last ? 'old' : age < 4 ? 'fresh' : age < 24 ? 'stale' : 'old';
+    var where = last ? esc([last.city, last.state].filter(Boolean).join(', ') || 'ZIP ' + last.zip) + ' <span class="small">' + esc(last.zip) + '</span>' : '<span class="small">No location shared yet</span>';
+    var wa = tPhoneDigits(x.phone), m = encodeURIComponent(tMsg());
+    var hist = (x.hist || []).map(function (h2) {
+      return '<div class="small">' + new Date(h2.t).toLocaleString() + ' · ' + esc([h2.city, h2.state].filter(Boolean).join(', ')) + ' ' + esc(h2.zip) + (h2.note ? ' · ' + esc(h2.note) : '') + '</div>';
+    }).join('');
+    return '<div class="tc"><div class="row"><div><b>' + esc(x.name) + '</b><div class="small">MC ' + esc(x.mc || '—') + ' · DOT ' + esc(x.dot) + ' · ' + esc(x.phone || 'no phone') + '</div>' +
+      (x.address ? '<div class="small">Registered base: <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/' + encodeURIComponent(x.address) + '">' + esc(x.address) + '</a> (not live location)</div>' : '') + '</div>' +
+      '<span class="badge ' + cls + '">' + (last ? 'Updated ' + tAgo(last.t) : 'No update') + '</span></div>' +
+      '<div class="where" style="margin-top:10px">📍 ' + where + (last ? ' <a class="small" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(last.zip) + '">Map</a>' : '') + '</div>' +
+      '<div class="acts">' +
+        (wa ? '<a class="btnlike" target="_blank" rel="noopener" href="https://wa.me/' + wa + '?text=' + m + '">💬 Ask on WhatsApp</a><a class="btnlike" href="sms:+' + wa + '?body=' + m + '">📱 Ask by SMS</a>' : '') +
+        '<button type="button" onclick="tCopy(' + i + ')">Copy message</button><button type="button" onclick="tDel(' + i + ')">Remove</button></div>' +
+      '<div class="upd"><input id="tz' + i + '" placeholder="Their ZIP code" maxlength="5" inputmode="numeric" style="max-width:150px"><input id="tn' + i + '" placeholder="Note (optional)" style="flex:1"><button type="button" class="go" onclick="tSave(' + i + ')">Save location</button></div>' +
+      (hist ? '<details style="margin-top:10px"><summary class="small">History (' + x.hist.length + ')</summary>' + hist + '</details>' : '') + '</div>';
+  }).join('');
+}
 
 bRender();
 initAuth();
