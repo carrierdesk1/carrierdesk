@@ -73,6 +73,27 @@ const fmtPhone = (v) => {
 };
 const nextDay = (iso) => new Date(Date.parse(iso + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
 
+// ---- Login check via Supabase ----
+// Returns the user, true (login not configured yet, so open), or null (a 401 was already sent).
+async function requireUser(req, res) {
+  const base = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  const anon = process.env.SUPABASE_ANON_KEY || '';
+  if (!base || !anon) return true;
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) { res.status(401).json({ error: 'Please log in first.' }); return null; }
+  try {
+    const r = await fetch(base + '/auth/v1/user', {
+      headers: { apikey: anon, Authorization: 'Bearer ' + token },
+      signal: AbortSignal.timeout(6000)
+    });
+    if (!r.ok) { res.status(401).json({ error: 'Session expired. Please log in again.' }); return null; }
+    return await r.json();
+  } catch (e) {
+    res.status(502).json({ error: 'Login check failed: ' + (e.message || e) });
+    return null;
+  }
+}
+
 // ---- Authority status (Active / Inactive) from FMCSA "Motus Carrier - All With History" ----
 const MOTUS = 'https://data.transportation.gov/resource/inys-ebih.json';
 const MOTUS_META = 'https://data.transportation.gov/api/views/inys-ebih.json';
@@ -182,6 +203,10 @@ module.exports = async (req, res) => {
       return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null, motusColumns: motusColumns, motusSample: motusSample });
     }
 
+    // Login check (only enforced once SUPABASE_URL and SUPABASE_ANON_KEY are set in Vercel)
+    const who = await requireUser(req, res);
+    if (who === null) return;
+
     const mode = String(req.query.mode || 'mc');
     const from = String(req.query.from || '').trim();
     const to = String(req.query.to || '').trim();
@@ -217,13 +242,13 @@ module.exports = async (req, res) => {
       if (f.length !== t.length) return res.status(400).json({ error: 'From and To must have the same number of digits (e.g. 500000 to 505000)' });
       if (t < f) return res.status(400).json({ error: 'To must be bigger than From' });
       if (!has('docket1')) return res.status(500).json({ error: 'No docket (MC) column in Census file. Open /api/bulk?debug=1' });
-      order = 'docket1';
+      order = 'docket1,dot_number';
     } else {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
         return res.status(400).json({ error: 'Use YYYY-MM-DD dates' });
       }
       if (!has('add_date')) return res.status(500).json({ error: 'No add_date column in Census file' });
-      order = 'add_date';
+      order = 'add_date,dot_number';
     }
 
     let raw;
