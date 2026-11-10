@@ -38,6 +38,8 @@ button:hover{background:#f1f5f9}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:20px}
 .grid .val{font-size:15px;font-weight:500}
 .contact{border-top:1px solid var(--line);background:#fbfcfe}.contact .small{padding:16px 20px}
+.chips{width:100%;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px}.chips label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.bw{overflow-x:auto;margin-top:8px}.bw table{min-width:900px;font-size:13px}.bw td,.bw th{padding:9px 10px}
 a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .act{padding:0 20px 20px}
 .act button{background:var(--navy);color:#fff;border-color:var(--navy)}
@@ -62,6 +64,24 @@ td select{padding:6px 8px;border-radius:8px}
 </form>
 <div id="msg"></div>
 <div id="results"></div>
+<h3>Bulk search</h3>
+<form id="bf">
+  <select id="bmode"><option value="mc">MC range</option><option value="date">Date range (new carriers)</option></select>
+  <div id="bmc" style="display:contents"><input id="bfrom" placeholder="From MC, e.g. 181036" inputmode="numeric"><input id="bto" placeholder="To MC, e.g. 191036" inputmode="numeric"></div>
+  <div id="bdate" style="display:none"><input type="date" id="dfrom"> <input type="date" id="dto"></div>
+  <input id="bmin" type="number" min="0" placeholder="Min power units" style="max-width:170px;flex:0 1 170px">
+  <select id="bfleet"><option value="">Any fleet type</option><option value="straight">Straight trucks only</option><option value="tractor">Tractors only</option></select>
+  <select id="bmatch"><option value="any">Any selected cargo</option><option value="all">All selected cargo</option></select>
+  <div class="chips" id="bcargo"></div>
+  <button class="go" type="submit">Fetch carriers</button>
+</form>
+<div id="bmsg"></div>
+<div class="tools" id="btools" style="display:none">
+  <button id="bsave" type="button">Save all to leads</button>
+  <button id="bcsv" type="button">Download CSV</button>
+  <button id="bmore" type="button" style="display:none">Load more</button>
+</div>
+<div class="bw" id="bres"></div>
 <h3>My leads</h3>
 <div class="tools">
   <button id="csv" type="button">Download CSV</button>
@@ -159,6 +179,62 @@ function renderLeads() {
         '</select></td><td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
     }).join('') + '</table>';
 }
+
+var CARGO = ['General Freight','Household Goods','Metal Sheets/Coils','Motor Vehicles','Drive/Tow Away','Logs/Poles/Lumber','Building Materials','Machinery/Large Objects','Refrigerated Food','Beverages','Paper Products','Construction','Intermodal','Oilfield Equipment'];
+$('bcargo').innerHTML = CARGO.map(function (c) { return '<label><input type="checkbox" value="' + esc(c) + '" style="padding:0"> ' + esc(c) + '</label>'; }).join('');
+var bulk = [], bNext = null, bBase = '';
+$('bmode').onchange = function () {
+  var m = $('bmode').value === 'mc';
+  $('bmc').style.display = m ? 'contents' : 'none';
+  $('bdate').style.display = m ? 'none' : 'block';
+};
+(function () { var t = new Date(), f = new Date(t.getTime() - 5 * 86400000); function iso(d) { return d.toISOString().slice(0, 10); } $('dfrom').value = iso(f); $('dto').value = iso(t); })();
+
+function bRender() {
+  $('bres').innerHTML = bulk.length ? '<table><tr><th>Company</th><th>Legal name</th><th>MC</th><th>USDOT</th><th>Phone</th><th>Email</th><th>Power units</th><th>Trucks / Tractors</th><th>Cargo carried</th><th>State</th></tr>' +
+    bulk.map(function (x) {
+      return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.legalName) + '</td><td>' + esc(x.mc.join(', ') || '—') + '</td><td>' + esc(x.dot) + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + esc(x.email || '—') + '</td><td>' + x.powerUnits + '</td><td>' + x.straightTrucks + ' / ' + x.tractors + '</td><td>' + esc(x.cargo.join(', ') || '—') + '</td><td>' + esc(x.state) + '</td></tr>';
+    }).join('') + '</table>' : '';
+  $('btools').style.display = bulk.length || bNext !== null ? 'flex' : 'none';
+  $('bmore').style.display = bNext !== null ? '' : 'none';
+}
+function runBulk(offset) {
+  $('bmsg').className = ''; $('bmsg').textContent = 'Fetching… (thora waqt lag sakta hai)';
+  fetch(bBase + '&offset=' + offset).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
+    if (!x.ok) { $('bmsg').className = 'err'; $('bmsg').textContent = x.d.error || 'Error'; return; }
+    bulk = offset ? bulk.concat(x.d.rows) : x.d.rows;
+    bNext = x.d.nextOffset;
+    $('bmsg').textContent = bulk.length + ' carrier(s) mile' + (bNext !== null ? ' (aur records baqi hain, "Load more" dabayein)' : '.') + (x.d.warnings && x.d.warnings.length ? ' ' + x.d.warnings.join(' ') : '');
+    bRender();
+  }).catch(function () { $('bmsg').className = 'err'; $('bmsg').textContent = 'Could not reach the server. api/bulk.js deploy hui hai?'; });
+}
+$('bf').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var m = $('bmode').value;
+  var cargo = Array.prototype.map.call($('bcargo').querySelectorAll('input:checked'), function (i) { return i.value; }).join('|');
+  bBase = '/api/bulk?mode=' + m + '&from=' + encodeURIComponent(m === 'mc' ? $('bfrom').value : $('dfrom').value) + '&to=' + encodeURIComponent(m === 'mc' ? $('bto').value : $('dto').value) +
+    '&min=' + encodeURIComponent($('bmin').value) + '&fleet=' + $('bfleet').value + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(cargo);
+  bulk = []; bNext = null; bRender(); runBulk(0);
+});
+$('bmore').onclick = function () { if (bNext !== null) runBulk(bNext); };
+$('bsave').onclick = function () {
+  var l = getLeads(), n = 0;
+  bulk.forEach(function (c) {
+    if (l.some(function (x) { return x.dot === c.dot; })) return;
+    l.push({ dot: c.dot, mc: c.mc.join(' '), name: c.name, address: [c.city, c.state].filter(Boolean).join(', '), authorized: '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New' });
+    n++;
+  });
+  setLeads(l); renderLeads(); alert(n + ' naye leads save huye.');
+};
+$('bcsv').onclick = function () {
+  var rows = [['Company', 'Legal name', 'MC', 'DOT', 'Phone', 'Cell', 'Email', 'Officer', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Cargo', 'City', 'State', 'Added']].concat(
+    bulk.map(function (x) { return [x.name, x.legalName, x.mc.join(' '), x.dot, x.phone, x.cellPhone, x.email, x.officer, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.cargo.join('; '), x.city, x.state, x.addDate]; }));
+  var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'bulk-carriers.csv';
+  a.click();
+};
 
 $('csv').onclick = function () {
   var l = getLeads();
