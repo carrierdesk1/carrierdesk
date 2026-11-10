@@ -127,7 +127,62 @@ async function getMotusKeys() {
   return motusKeyCache || [];
 }
 
+// ---- Insurance (FMCSA "Insur - Active/Pending Insurance") ----
+const INS = 'https://data.transportation.gov/resource/chgs-tx6x.json';
+const INS_META = 'https://data.transportation.gov/api/views/chgs-tx6x.json';
+let insKeyCache = null;
+async function getInsKeys() {
+  if (insKeyCache && insKeyCache.length) return insKeyCache;
+  try {
+    const r = await fetch(INS_META, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) {
+      const m = await r.json();
+      const k = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
+      if (k.length) insKeyCache = k;
+    }
+  } catch (e) { /* ignore */ }
+  return insKeyCache || [];
+}
+
 const stripZeros = (v) => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
+
+// Returns { dot: {s:'On File'|'None'|'Unknown', amt:<thousands of $>} } or null when the data could not be used.
+async function loadInsurance(pairs, warnings) {
+  const keys = await getInsKeys();
+  const dockCol = keys.find((k) => /^docket(_number)?$/i.test(k)) || keys.find((k) => /docket/i.test(k)) || '';
+  const dotCol = keys.find((k) => /^(usdot|us_dot|dot)(_number)?$/i.test(k)) || '';
+  const typeCol = keys.find((k) => /ins.*type|type.*desc|ins_class|mod_col/i.test(k)) || '';
+  const amtCol = keys.find((k) => /max_cov/i.test(k)) || '';
+  const useDock = !!dockCol;
+  const col = useDock ? dockCol : dotCol;
+  if (!col) { warnings.push('Insurance columns not found, insurance not shown. Open /api/bulk?debug=1.'); return null; }
+  const vals = [];
+  pairs.forEach((p) => {
+    if (useDock) { if (p.mc) { vals.push("'MC" + p.mc + "'"); vals.push("'" + p.mc + "'"); } }
+    else { const d = stripZeros(p.dot); if (d) { vals.push("'" + d + "'"); vals.push("'" + d.padStart(8, '0') + "'"); } }
+  });
+  if (!vals.length) return null;
+  const select = [col, typeCol, amtCol].filter(Boolean).join(',');
+  let rows;
+  try {
+    rows = await sodaAt(INS, { $select: select, $where: col + ' in (' + vals.join(',') + ')', $limit: 20000 }, 8000);
+  } catch (e) { warnings.push('Insurance lookup failed (' + (e.message || e) + ').'); return null; }
+  if (!rows.length) { warnings.push('Insurance data returned nothing for these carriers, so insurance is shown as Unknown. Open /api/bulk?debug=1.'); return null; }
+  const m = {};
+  rows.forEach((r) => { const k = stripZeros(r[col]); if (k) (m[k] = m[k] || []).push(r); });
+  const isBipd = (r) => /bipd|primary|liab/i.test(String(r[typeCol] || ''));
+  const useType = !!typeCol && rows.some(isBipd);
+  const out = {};
+  pairs.forEach((p) => {
+    const key = useDock ? stripZeros(p.mc) : stripZeros(p.dot);
+    if (!key) { out[p.dot] = { s: 'Unknown', amt: 0 }; return; }
+    let list = m[key] || [];
+    if (useType) list = list.filter(isBipd);
+    const amt = list.reduce((mx, r) => Math.max(mx, amtCol ? num(r[amtCol]) : 0), 0);
+    out[p.dot] = { s: list.length ? 'On File' : 'None', amt: amt };
+  });
+  return out;
+}
 
 async function loadAuthority(dots, warnings) {
   const out = { ok: false, map: {}, statusCol: '', typeCol: '' };
@@ -223,6 +278,21 @@ module.exports = async (req, res) => {
       return res.status(200).json({ auth: out0, warnings: warn0 });
     }
 
+    if (req.query.mode === 'ins') {
+      const who1 = await requireUser(req, res);
+      if (who1 === null) return;
+      const pairs1 = String(req.query.pairs || '').split(',').filter(Boolean).slice(0, 200).map((p) => {
+        const a = p.split(':');
+        return { dot: a[0], mc: (a[1] || '').replace(/\D/g, '') };
+      });
+      const warn1 = [];
+      const ins1 = await loadInsurance(pairs1, warn1);
+      const out1 = {};
+      pairs1.forEach((p) => { out1[p.dot] = (ins1 && ins1[p.dot]) || { s: 'Unknown', amt: 0 }; });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ ins: out1, warnings: warn1 });
+    }
+
     const keys = await getKeys();
     const has = (k) => keys.indexOf(k) !== -1;
 
@@ -230,7 +300,7 @@ module.exports = async (req, res) => {
       const sample = await soda({ $limit: 1, $where: 'email_address IS NOT NULL' }).catch(() => []);
       const motusColumns = await getMotusKeys();
       const motusSample = await sodaAt(MOTUS, { $limit: 2 }, 6000).catch((e) => String(e.message || e));
-      return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null, motusColumns: motusColumns, motusSample: motusSample });
+      return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null, motusColumns: motusColumns, motusSample: motusSample, insColumns: await getInsKeys(), insSample: await sodaAt(INS, { $limit: 2 }, 6000).catch((e) => String(e.message || e)) });
     }
 
     // Login check (only enforced once SUPABASE_URL and SUPABASE_ANON_KEY are set in Vercel)
@@ -242,6 +312,10 @@ module.exports = async (req, res) => {
     const to = String(req.query.to || '').trim();
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const warnings = [];
+    const stList = String(req.query.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
+    const cityQ = String(req.query.city || '').toUpperCase().replace(/[^A-Z0-9 .\-]/g, '').trim();
+    const needEmail = req.query.hasemail === '1';
+    const needPhone = req.query.hasphone === '1';
 
     let f = '', t = '';
     let order = 'dot_number';
@@ -262,6 +336,10 @@ module.exports = async (req, res) => {
       } else {
         where.push("add_date >= '" + from + "' AND add_date < '" + nextDay(to) + "'");
       }
+      if (stList.length && has('phy_state')) where.push('phy_state in (' + stList.map((x) => "'" + x + "'").join(',') + ')');
+      if (cityQ && has('phy_city')) where.push("upper(phy_city) like '%" + cityQ + "%'");
+      if (needEmail && has('email_address')) where.push('email_address IS NOT NULL');
+      if (needPhone && has('phone')) where.push(has('cell_phone') ? '(phone IS NOT NULL OR cell_phone IS NOT NULL)' : 'phone IS NOT NULL');
       return where.join(' AND ');
     }
 
@@ -284,7 +362,7 @@ module.exports = async (req, res) => {
     // Only ask Census for the columns we actually use: far smaller download, much faster.
     const sel = keys.filter((k) =>
       /^(dot_number|legal_name|dba_name|phone|cell_phone|email_address|company_officer_1|power_units|total_drivers|phy_city|phy_state|add_date|status_code|docket[123](prefix)?)$/.test(k) ||
-      /^(crgo|cargo)/i.test(k) || /^(own|trm|trp)(tract|truck|trail)/i.test(k)
+      /^(crgo|cargo)/i.test(k) || /^(own|trm|trp)(tract|truck|trail)/i.test(k) || /(safety.*rating|^rating$|crash)/i.test(k)
     ).join(',');
     async function getPage(where, off) {
       const p = { $where: where, $order: order, $limit: PAGE, $offset: off };
@@ -348,6 +426,10 @@ module.exports = async (req, res) => {
       warnings.push('Fleet breakdown not found in Census, equipment filter ignored.');
     }
 
+    const ratingKey = keys.find((k) => /^(safety_?rating|rating)$/i.test(k)) || keys.find((k) => /safety.*rating/i.test(k)) || '';
+    const crashAll = keys.filter((k) => /crash/i.test(k));
+    const crashKey = crashAll.find((k) => /total/i.test(k)) || '';
+
     const rows = [];
     raw.forEach((c) => {
       // Only the MC that is inside the requested range
@@ -401,7 +483,9 @@ module.exports = async (req, res) => {
         cargo: carried,
         city: c.phy_city || '',
         state: c.phy_state || '',
-        addDate: day(c.add_date)
+        addDate: day(c.add_date),
+        safety: ratingKey ? String(c[ratingKey] || '') : '',
+        crashes: crashAll.length ? (crashKey ? num(c[crashKey]) : crashAll.reduce((sum, k) => sum + num(c[k]), 0)) : ''
       });
     });
 
