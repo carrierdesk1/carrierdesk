@@ -135,6 +135,15 @@ h3{margin:6px 4px 12px;font-size:20px}
 #bcargo label:hover{border-color:var(--acc)}
 .psz{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut)}.psz select{padding:8px 10px}
 .au-wait{background:#f1f5f9;color:#94a3b8}
+th.s{cursor:pointer;user-select:none;white-space:nowrap}
+th.s:hover{background:#16233b}
+.ib{padding:2px 6px;border-radius:6px;font-size:12px;border:1px solid var(--line);background:#fff;cursor:pointer;margin-left:5px;line-height:1.3;text-decoration:none;display:inline-block;color:var(--ink)}
+.ib:hover{background:#eef2ff;text-decoration:none}
+.bw input[type=checkbox]{min-width:0;width:16px;height:16px;padding:0;margin:0}
+.ins-On{background:#dcfce7;color:#15803d}.ins-None{background:#fee2e2;color:#b91c1c}.ins-Unknown{background:#f1f5f9;color:#64748b}
+.pre{display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle}.pre button{padding:8px 10px;font-size:12px}
+.lt input{min-width:0;width:100%;padding:6px 8px}
+tr.due td{background:#fef9c3!important}
 @media(max-width:560px){#bcargo{grid-template-columns:1fr}}
 @media(max-width:1100px){.bulkgrid{grid-template-columns:1fr}.hero .truck{display:none}}
 @media(max-width:820px){
@@ -214,12 +223,21 @@ h3{margin:6px 4px 12px;font-size:20px}
           <div class="bform">
             <select id="bmode"><option value="mc">MC range</option><option value="date">Date range (new carriers)</option></select>
             <div id="bmc" style="display:contents"><input id="bfrom" placeholder="From MC, e.g. 500000" inputmode="numeric"><input id="bto" placeholder="To MC, e.g. 505000" inputmode="numeric"></div>
-            <div id="bdate" style="display:none"><input type="date" id="dfrom"> <input type="date" id="dto"></div>
+            <div id="bdate" style="display:none"><input type="date" id="dfrom"> <input type="date" id="dto"><span class="pre"><button type="button" data-d="7">7 days</button><button type="button" data-d="30">30 days</button><button type="button" data-d="90">90 days</button></span></div>
             <input id="bmin" type="number" min="0" placeholder="Min trucks" style="max-width:130px;flex:0 1 130px">
             <input id="bmax" type="number" min="0" placeholder="Max trucks" style="max-width:130px;flex:0 1 130px">
+            <input id="bstate" placeholder="State(s), e.g. TX, GA" style="max-width:190px;flex:0 1 190px" autocomplete="off">
+            <input id="bcity" placeholder="City (optional)" style="max-width:170px;flex:0 1 170px" autocomplete="off">
             <div class="chips" id="bequip"></div>
             <select id="bauth"><option value="">Authority: Any</option><option value="active">Authority: Active</option><option value="inactive">Authority: Inactive</option></select>
             <select id="bmatch"><option value="any">Any selected cargo</option><option value="all">All selected cargo</option></select>
+            <div class="chips" id="bopts">
+              <span class="lbl">Only</span>
+              <label><input type="checkbox" id="bhasemail"> Has email</label>
+              <label><input type="checkbox" id="bhasphone"> Has phone</label>
+              <label><input type="checkbox" id="bhide"> Hide saved / contacted</label>
+            </div>
+            <select id="bins"><option value="">Insurance: don't check</option><option value="show">Insurance: check &amp; show</option><option value="on">Insurance: on file only</option></select>
             <div class="cbox">
               <button type="button" class="cbtn" id="cbtn"><span id="cbtnt">Cargo: Any</span><span>▾</span></button>
               <div id="cpanel">
@@ -240,6 +258,8 @@ h3{margin:6px 4px 12px;font-size:20px}
           <label class="psz">Rows per page <select id="bpsz"><option>25</option><option>50</option><option>100</option><option>250</option><option selected>500</option><option>1000</option><option>2500</option><option>5000</option></select></label>
           <button id="bstop" type="button" style="display:none">⏹ Stop loading</button>
           <button id="bmore" type="button" style="display:none">Load more</button>
+          <button id="bselall" type="button">☑ Select all shown</button>
+          <button id="bselnone" type="button" style="display:none">Clear selection</button>
           <button id="bsave" type="button" class="btn-o">⬇ Save all to leads</button>
           <button id="bcsv" type="button" class="btn-g">Export to Excel (CSV)</button>
         </div>
@@ -384,17 +404,24 @@ function getLeads() {
 function setLeads(l) { try { localStorage.setItem(leadsKey(), JSON.stringify(l)); } catch (e) {} }
 function del(i) { var l = getLeads(); l.splice(i, 1); setLeads(l); renderLeads(); }
 function setStatus(i, v) { var l = getLeads(); l[i].status = v; setLeads(l); }
+function setField(i, f, v) { var l = getLeads(); if (l[i]) { l[i][f] = v; setLeads(l); } }
 function renderLeads() {
   var l = getLeads();
   $('leadBadge').textContent = l.length;
   if (!l.length) { $('leads').innerHTML = '<p class="small" style="padding:16px">No leads yet. Search a carrier and choose Save lead.</p>'; return; }
   var opts = ['New', 'Contacted', 'Interested', 'Onboarded', 'Not interested'];
-  $('leads').innerHTML = '<table><tr><th>Name</th><th>MC / DOT</th><th>Authorized</th><th>Email / Phone</th><th>Status</th><th></th></tr>' +
-    l.map(function (x, i) {
-      return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.authorized) + '</td><td>' + esc(x.email || '—') + '<br><span class="small">' + esc(x.phone || '') + '</span></td><td><select onchange="setStatus(' + i + ',this.value)">' +
-        opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
-        '</select></td><td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
-    }).join('') + '</table>';
+  var today = new Date().toISOString().slice(0, 10), due = 0;
+  var rows = l.map(function (x, i) {
+    var isDue = x.follow && x.follow <= today && x.status !== 'Onboarded' && x.status !== 'Not interested';
+    if (isDue) due++;
+    return '<tr' + (isDue ? ' class="due"' : '') + '><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.officer || '—') + '</td><td>' + esc(x.email || '—') + '<br><span class="small">' + esc(x.phone || '') + '</span></td><td><select onchange="setStatus(' + i + ',this.value)">' +
+      opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
+      '</select></td><td class="lt" style="min-width:140px"><input type="date" value="' + esc(x.follow || '') + '" onchange="setField(' + i + ',\'follow\',this.value);renderLeads()"></td>' +
+      '<td class="lt" style="min-width:200px"><input type="text" placeholder="Notes…" value="' + esc(x.note || '') + '" onchange="setField(' + i + ',\'note\',this.value)"></td>' +
+      '<td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
+  }).join('');
+  $('leads').innerHTML = '<p class="small" style="padding:12px 16px 0">' + (due ? '⏰ Follow-ups due: <b>' + due + '</b> (highlighted)' : 'No follow-ups due.') + '</p>' +
+    '<table><tr><th>Name</th><th>MC / DOT</th><th>Officer</th><th>Email / Phone</th><th>Status</th><th>Follow-up</th><th>Notes</th><th></th></tr>' + rows + '</table>';
 }
 function csvOut(rows, name) {
   var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
@@ -404,8 +431,8 @@ function csvOut(rows, name) {
 }
 $('csv').onclick = function () {
   var l = getLeads();
-  csvOut([['Name', 'MC', 'DOT', 'Address', 'Authorized', 'Common authority', 'Power units', 'Email', 'Phone', 'Officer', 'Status']].concat(
-    l.map(function (x) { return [x.name, x.mc, x.dot, x.address, x.authorized, x.common, x.units, x.email, x.phone, x.officer, x.status]; })), 'leads.csv');
+  csvOut([['Name', 'MC', 'DOT', 'Address', 'Authorized', 'Common authority', 'Power units', 'Email', 'Phone', 'Officer', 'Status', 'Follow-up', 'Notes']].concat(
+    l.map(function (x) { return [x.name, x.mc, x.dot, x.address, x.authorized, x.common, x.units, x.email, x.phone, x.officer, x.status, x.follow, x.note]; })), 'leads.csv');
 };
 $('clear').onclick = function () { if (confirm('Delete all leads?')) { setLeads([]); renderLeads(); } };
 
@@ -502,7 +529,7 @@ $('bmode').onchange = function () {
 var PAGE_SIZE = 500;
 var bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
-var bAuthQ = [], bAuthActive = 0;
+var bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
 var FETCH_CONC = 5, AUTH_CONC = 3, AUTH_CHUNK = 200;
 
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
@@ -528,10 +555,65 @@ function bStatus() {
   else if (bDone) t += ' · all loaded';
   var left = bAuthQ.length + bAuthActive * AUTH_CHUNK;
   if (left && bulk.length) t += ' · checking authority…';
+  if (bulk.length && (bInsQ.length || bInsActive)) t += ' · checking insurance…';
+  if (bViewN !== bulk.length) t += ' · showing ' + bViewN.toLocaleString() + ' after filters';
   if (bWarn.length) t += ' · ' + bWarn.join(' ');
   $('bmsg').textContent = t;
 }
 function bSoon() { if (bTimer) return; bTimer = setTimeout(function () { bTimer = null; bRender(); }, 250); }
+function bInsWanted() { return $('bins').value !== ''; }
+function bLeadMap() { var m = {}; getLeads().forEach(function (x) { m[x.dot] = x.status || 'New'; }); return m; }
+function bSortVal(x, k) {
+  switch (k) {
+    case 'mc': return x.mc || '';
+    case 'name': return String(x.name || '').toLowerCase();
+    case 'officer': return String(x.officer || '').toLowerCase();
+    case 'phone': return x.phone || x.cellPhone || '';
+    case 'email': return x.email || '';
+    case 'loc': return (x.state || '') + ' ' + (x.city || '');
+    case 'units': return x.powerUnits || 0;
+    case 'equip': return x.equipment || '';
+    case 'auth': return x.authority || '';
+    case 'ins': return x.ins || '';
+    case 'safety': return x.safety || '';
+    case 'crashes': return x.crashes === '' || x.crashes == null ? '' : Number(x.crashes);
+    case 'lead': return x._lead || '';
+  }
+  return '';
+}
+function bView(lm) {
+  var hide = $('bhide').checked, insOn = $('bins').value === 'on';
+  var v = bulk.filter(function (x) {
+    x._lead = lm[x.dot] || '';
+    if (hide && x._lead) return false;
+    if (insOn && x.ins === 'None') return false;
+    return true;
+  });
+  var k = bSort.k, d = bSort.d;
+  if (!k && /mode=mc/.test(bBase)) { k = 'mc'; d = 1; }
+  if (k) v.sort(function (a, b) {
+    var A = bSortVal(a, k), B = bSortVal(b, k), ea = A === '' || A == null, eb = B === '' || B == null;
+    if (ea && eb) return 0; if (ea) return 1; if (eb) return -1;
+    return (A < B ? -1 : A > B ? 1 : 0) * d;
+  });
+  return v;
+}
+function bPhone(x) {
+  var p = x.phone || x.cellPhone;
+  if (!p) return '—';
+  var dg = String(p).replace(/\D/g, ''), full = dg.length === 10 ? '1' + dg : dg;
+  return '<a href="tel:+' + full + '">' + esc(p) + '</a><a class="ib" target="_blank" rel="noopener" href="https://wa.me/' + full + '" title="WhatsApp">💬</a>';
+}
+function bSelUpdate() {
+  var n = Object.keys(bSel).length;
+  $('bsave').textContent = n ? '⬇ Save selected (' + n + ')' : '⬇ Save all shown to leads';
+  $('bcsv').textContent = n ? 'Export selected (' + n + ')' : 'Export to Excel (CSV)';
+  $('bselnone').style.display = n ? '' : 'none';
+}
+function bTargets() {
+  if (Object.keys(bSel).length) return bulk.filter(function (x) { return bSel[x._k]; });
+  return bView(bLeadMap());
+}
 function bRender() {
   var c = bCounts();
   var defs = [['Verified carriers', c.n, '🚚', '#1a5fe0', '#dbe7ff'], ['With email', c.email, '✉️', '#16a34a', '#dcfce7'], ['With phone', c.phone, '📞', '#7c3aed', '#ede9fe'], ['States', c.states, '📍', '#f97316', '#ffedd5']];
@@ -544,24 +626,53 @@ function bRender() {
   $('bmore').style.display = bQueue.length && !bLoading ? '' : 'none';
   $('bgo').disabled = bLoading;
 
-  if (/mode=mc/.test(bBase)) bulk.sort(function (a, b) { return a.mc < b.mc ? -1 : a.mc > b.mc ? 1 : 0; });
-  var pages = Math.max(1, Math.ceil(bulk.length / PAGE_SIZE));
+  var lm = bLeadMap(), view = bView(lm);
+  bViewN = view.length;
+  var showIns = bInsWanted();
+  var showSafe = bulk.some(function (x) { return x.safety; });
+  var showCr = bulk.some(function (x) { return x.crashes !== '' && x.crashes != null; });
+  var pages = Math.max(1, Math.ceil(view.length / PAGE_SIZE));
   if (bPage > pages) bPage = pages;
-  var slice = bulk.slice((bPage - 1) * PAGE_SIZE, bPage * PAGE_SIZE);
-  $('bres').innerHTML = bulk.length ? '<table><thead><tr><th>MC</th><th>Carrier / Company</th><th>Officer</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th><th>Authority</th></tr></thead><tbody>' +
+  var slice = view.slice((bPage - 1) * PAGE_SIZE, bPage * PAGE_SIZE);
+
+  var cols = [['mc', 'MC'], ['name', 'Carrier / Company'], ['officer', 'Officer'], ['phone', 'Phone'], ['email', 'Email'], ['loc', 'Location'], ['units', 'Units'], ['equip', 'Equipment'], ['auth', 'Authority']];
+  if (showIns) cols.push(['ins', 'Insurance']);
+  if (showSafe) cols.push(['safety', 'Safety']);
+  if (showCr) cols.push(['crashes', 'Crashes']);
+  cols.push(['lead', 'Lead']);
+  var k0 = bSort.k || (/mode=mc/.test(bBase) ? 'mc' : '');
+  var head = '<th><input type="checkbox" id="bselpage" title="Select this page"></th>' + cols.map(function (cl) {
+    return '<th class="s" data-s="' + cl[0] + '">' + cl[1] + (k0 === cl[0] ? (bSort.k ? (bSort.d > 0 ? ' ▲' : ' ▼') : ' ▲') : '') + '</th>';
+  }).join('');
+  var leadCls = { 'New': 'au-Unknown', 'Contacted': 'au-Pending', 'Interested': 'au-Pending', 'Onboarded': 'au-Active', 'Not interested': 'au-Inactive' };
+
+  $('bres').innerHTML = view.length ? '<table><thead><tr>' + head + '</tr></thead><tbody>' +
     slice.map(function (x) {
-      return '<tr><td class="mono">' + esc(x.mc || '—') + '</td><td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td><td>' + esc(x.officer || '—') + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '—') + '</td><td>' + esc(loc(x)) + '</td><td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td><td>' + (x.authority ? '<span class="au au-' + esc(x.authority) + '">' + esc(x.authority) + '</span>' : '<span class="au au-wait">…</span>') + '</td></tr>';
+      var h2 = '<tr><td><input type="checkbox" class="rs" data-k="' + esc(x._k) + '"' + (bSel[x._k] ? ' checked' : '') + '></td>' +
+        '<td class="mono">' + esc(x.mc || '—') + '</td>' +
+        '<td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td>' +
+        '<td>' + esc(x.officer || '—') + '</td>' +
+        '<td>' + bPhone(x) + '</td>' +
+        '<td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a><button type="button" class="ib cp" data-copy="' + esc(x.email) + '" title="Copy email">⧉</button>' : '—') + '</td>' +
+        '<td>' + esc(loc(x)) + '</td><td>' + esc(x.powerUnits) + '</td>' +
+        '<td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td>' +
+        '<td>' + (x.authority ? '<span class="au au-' + esc(x.authority) + '">' + esc(x.authority) + '</span>' : '<span class="au au-wait">…</span>') + '</td>';
+      if (showIns) h2 += '<td>' + (x.ins ? '<span class="au ins-' + (x.ins === 'On File' ? 'On' : x.ins) + '">' + esc(x.ins) + (x.ins === 'On File' && x.insAmt ? ' $' + esc(x.insAmt) + 'K' : '') + '</span>' : '<span class="au au-wait">…</span>') + '</td>';
+      if (showSafe) h2 += '<td>' + esc(x.safety || '—') + '</td>';
+      if (showCr) h2 += '<td>' + (x.crashes === '' || x.crashes == null ? '—' : esc(x.crashes)) + '</td>';
+      h2 += '<td>' + (x._lead ? '<span class="au ' + (leadCls[x._lead] || 'au-Unknown') + '">' + esc(x._lead) + '</span>' : '—') + '</td></tr>';
+      return h2;
     }).join('') + '</tbody></table>' : '';
-  // pagination
   if (pages <= 1) { $('pager').innerHTML = ''; }
   else {
-    var start = Math.max(1, Math.min(bPage - 2, pages - 4)), end = Math.min(pages, start + 4), h = '';
-    h += '<button class="pg" type="button" onclick="goPage(' + (bPage - 1) + ')"' + (bPage === 1 ? ' disabled' : '') + '>‹</button>';
-    for (var p = start; p <= end; p++) h += '<button class="pg' + (p === bPage ? ' on' : '') + '" type="button" onclick="goPage(' + p + ')">' + p + '</button>';
-    h += '<button class="pg" type="button" onclick="goPage(' + (bPage + 1) + ')"' + (bPage === pages ? ' disabled' : '') + '>›</button>';
-    h += '<span class="small" style="align-self:center">' + pages + ' pages</span>';
-    $('pager').innerHTML = h;
+    var start = Math.max(1, Math.min(bPage - 2, pages - 4)), end = Math.min(pages, start + 4), hp = '';
+    hp += '<button class="pg" type="button" onclick="goPage(' + (bPage - 1) + ')"' + (bPage === 1 ? ' disabled' : '') + '>‹</button>';
+    for (var p = start; p <= end; p++) hp += '<button class="pg' + (p === bPage ? ' on' : '') + '" type="button" onclick="goPage(' + p + ')">' + p + '</button>';
+    hp += '<button class="pg" type="button" onclick="goPage(' + (bPage + 1) + ')"' + (bPage === pages ? ' disabled' : '') + '>›</button>';
+    hp += '<span class="small" style="align-self:center">' + pages + ' pages</span>';
+    $('pager').innerHTML = hp;
   }
+  bSelUpdate();
   bStatus();
 }
 function goPage(n) { bPage = n; bRender(); var el = $('bres'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -577,11 +688,11 @@ function bGet(off, run, tries) {
 function bAddRows(d) {
   (d.rows || []).forEach(function (r) {
     var k = r.dot + '|' + r.mc;
-    if (!bSeen[k]) { bSeen[k] = 1; bulk.push(r); if (!r.authority) bAuthQ.push(r); }
+    if (!bSeen[k]) { bSeen[k] = 1; r._k = k; bulk.push(r); if (!r.authority) bAuthQ.push(r); if (bInsWanted()) { r._iq = 1; bInsQ.push(r); } }
   });
   bScanned += d.scanned || 0; bDone++;
   (d.warnings || []).forEach(function (w) { if (bWarn.indexOf(w) === -1) bWarn.push(w); });
-  bAuthPump();
+  bAuthPump(); bInsPump();
 }
 // Authority (Active/Inactive) is fetched in the background in small batches, so rows show up immediately.
 function bAuthPump() {
@@ -601,6 +712,25 @@ function bAuthPump() {
         .catch(function () { if (run === bRun) chunk.forEach(function (r) { r.authority = 'Unknown'; }); })
         .then(function () { if (run !== bRun) return; bAuthActive--; bSoon(); bAuthPump(); });
     })(bAuthQ.splice(0, AUTH_CHUNK));
+  }
+}
+function bInsPump() {
+  var run = bRun;
+  while (bInsActive < 2 && bInsQ.length) {
+    (function (chunk) {
+      bInsActive++;
+      var pairs = chunk.map(function (r) { return r.dot + ':' + String(r.mc || '').replace(/\D/g, ''); }).join(',');
+      apiFetch('/api/bulk?mode=ins&pairs=' + encodeURIComponent(pairs))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (run !== bRun) return;
+          var a = d.ins || {};
+          chunk.forEach(function (r) { var v = a[r.dot]; r.ins = v ? v.s : 'Unknown'; r.insAmt = v ? v.amt : 0; });
+          (d.warnings || []).forEach(function (w) { if (bWarn.indexOf(w) === -1) bWarn.push(w); });
+        })
+        .catch(function () { if (run === bRun) chunk.forEach(function (r) { r.ins = 'Unknown'; }); })
+        .then(function () { if (run !== bRun) return; bInsActive--; bSoon(); bInsPump(); });
+    })(bInsQ.splice(0, 150));
   }
 }
 function bCheckDone() {
@@ -657,27 +787,74 @@ $('bf').addEventListener('submit', function (e) {
   var m = $('bmode').value;
   bBase = '/api/bulk?mode=' + m + '&from=' + encodeURIComponent(m === 'mc' ? $('bfrom').value : $('dfrom').value) + '&to=' + encodeURIComponent(m === 'mc' ? $('bto').value : $('dto').value) +
     '&min=' + encodeURIComponent($('bmin').value) + '&max=' + encodeURIComponent($('bmax').value) +
-    '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=' + $('bauth').value + '&noauth=' + ($('bauth').value ? '0' : '1') + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo'));
+    '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=' + $('bauth').value + '&noauth=' + ($('bauth').value ? '0' : '1') + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo')) +
+    '&state=' + encodeURIComponent($('bstate').value) + '&city=' + encodeURIComponent($('bcity').value) +
+    '&hasemail=' + ($('bhasemail').checked ? '1' : '0') + '&hasphone=' + ($('bhasphone').checked ? '1' : '0');
   bRun++; bulk = []; bSeen = {}; bQueue = []; bActive = 0; bDone = 0; bTotal = null; bPlain = false;
-  bAuthQ = []; bAuthActive = 0; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
+  bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
   bStart();
 });
 $('bstop').onclick = function () { bStop = true; $('bstop').style.display = 'none'; };
 $('bmore').onclick = function () { if (bQueue.length && !bLoading) { bStop = false; $('bmsg').className = ''; bPump(); } };
 $('bpsz').onchange = function () { PAGE_SIZE = parseInt($('bpsz').value, 10) || 500; bPage = 1; bRender(); };
 $('bsave').onclick = function () {
-  var l = getLeads(), n = 0;
-  bulk.forEach(function (c) {
-    if (l.some(function (x) { return x.dot === c.dot; })) return;
-    l.push({ dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: c.authority || '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New' });
+  var l = getLeads(), n = 0, have = {};
+  l.forEach(function (x) { have[x.dot] = 1; });
+  bTargets().forEach(function (c) {
+    if (have[c.dot]) return;
+    have[c.dot] = 1;
+    l.push({ dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: c.authority || '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New', follow: '', note: '' });
     n++;
   });
-  setLeads(l); renderLeads(); alert(n + ' new leads saved.');
+  setLeads(l); renderLeads(); bSel = {}; bRender(); alert(n + ' new leads saved.');
 };
 $('bcsv').onclick = function () {
-  csvOut([['MC', 'USDOT', 'Company', 'DBA', 'Phone', 'Cell', 'Email', 'Officer', 'City', 'State', 'Equipment', 'Authority', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
-    bulk.map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.phone, x.cellPhone, x.email, x.officer, x.city, x.state, x.equipment, x.authority, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; })), 'bulk-carriers.csv');
+  csvOut([['MC', 'USDOT', 'Company', 'DBA', 'Officer', 'Phone', 'Cell', 'Email', 'City', 'State', 'Equipment', 'Authority', 'Insurance', 'Safety rating', 'Crashes', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
+    bTargets().map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.officer, x.phone, x.cellPhone, x.email, x.city, x.state, x.equipment, x.authority, x.ins ? x.ins + (x.insAmt ? ' $' + x.insAmt + 'K' : '') : '', x.safety, x.crashes, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; })), 'bulk-carriers.csv');
 };
+$('bselall').onclick = function () { bView(bLeadMap()).forEach(function (x) { bSel[x._k] = 1; }); bRender(); };
+$('bselnone').onclick = function () { bSel = {}; bRender(); };
+$('bhide').addEventListener('change', function () { bPage = 1; bRender(); });
+$('bins').addEventListener('change', function () {
+  if (bInsWanted()) { bulk.forEach(function (r) { if (!r.ins && !r._iq) { r._iq = 1; bInsQ.push(r); } }); bInsPump(); }
+  bPage = 1; bRender();
+});
+$('bres').addEventListener('click', function (e) {
+  var t = e.target, th = t.closest ? t.closest('th.s') : null;
+  if (th) {
+    var k = th.getAttribute('data-s');
+    if (bSort.k === k) bSort.d = -bSort.d; else { bSort.k = k; bSort.d = 1; }
+    bPage = 1; bRender(); return;
+  }
+  if (t.classList && t.classList.contains('cp')) {
+    var txt = t.getAttribute('data-copy') || '';
+    var done = function () { var o = t.textContent; t.textContent = '✓'; setTimeout(function () { t.textContent = o; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done);
+    else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (er) {} document.body.removeChild(ta); done(); }
+  }
+});
+$('bres').addEventListener('change', function (e) {
+  var t = e.target;
+  if (!t.classList) return;
+  if (t.classList.contains('rs')) {
+    var k = t.getAttribute('data-k');
+    if (t.checked) bSel[k] = 1; else delete bSel[k];
+    bSelUpdate();
+  } else if (t.id === 'bselpage') {
+    Array.prototype.forEach.call($('bres').querySelectorAll('.rs'), function (cb) {
+      cb.checked = t.checked;
+      var k = cb.getAttribute('data-k');
+      if (t.checked) bSel[k] = 1; else delete bSel[k];
+    });
+    bSelUpdate();
+  }
+});
+Array.prototype.forEach.call(document.querySelectorAll('#bdate [data-d]'), function (b) {
+  b.onclick = function () {
+    var t = new Date(), f = new Date(t.getTime() - parseInt(b.getAttribute('data-d'), 10) * 86400000);
+    $('dfrom').value = f.toISOString().slice(0, 10); $('dto').value = t.toISOString().slice(0, 10);
+  };
+});
 
 bRender();
 initAuth();
