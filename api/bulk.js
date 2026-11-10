@@ -430,7 +430,7 @@ module.exports = async (req, res) => {
     const crashAll = keys.filter((k) => /crash/i.test(k));
     const crashKey = crashAll.find((k) => /total/i.test(k)) || '';
 
-    const drop = { units: 0, equip: 0, cargo: 0 };
+    const drop = { units: 0, equip: 0, cargo: 0, auth: 0 };
     const rows = [];
     raw.forEach((c) => {
       // Only the MC that is inside the requested range
@@ -504,7 +504,7 @@ module.exports = async (req, res) => {
         }
       });
       if (authWanted) {
-        if (au.ok) outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted);
+        if (au.ok) { outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted); drop.auth = rows.length - outRows.length; }
         else if (rows.length) warnings.push('Authority filter ignored because authority data could not be loaded.');
       }
     }
