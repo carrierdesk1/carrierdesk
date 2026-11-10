@@ -430,6 +430,7 @@ module.exports = async (req, res) => {
     const crashAll = keys.filter((k) => /crash/i.test(k));
     const crashKey = crashAll.find((k) => /total/i.test(k)) || '';
 
+    const drop = { units: 0, equip: 0, cargo: 0 };
     const rows = [];
     raw.forEach((c) => {
       // Only the MC that is inside the requested range
@@ -453,16 +454,15 @@ module.exports = async (req, res) => {
       const trucks = truckKeys.reduce((s, k) => s + num(c[k]), 0);
       const trailers = trailKeys.reduce((s, k) => s + num(c[k]), 0);
       const units = num(c.power_units) || tractors + trucks;
-      if (units < minUnits) return;
-      if (maxUnits && units > maxUnits) return;
+      if (units < minUnits || (maxUnits && units > maxUnits)) { drop.units++; return; }
 
       const equipment = equipmentOf(tractors, trucks, trailers, units);
-      if (equipWanted.length && (tractKeys.length || truckKeys.length) && equipWanted.indexOf(equipment) === -1) return;
+      if (equipWanted.length && (tractKeys.length || truckKeys.length) && equipWanted.indexOf(equipment) === -1) { drop.equip++; return; }
 
       const carried = Object.keys(cargoCol).filter((l) => yes(c[cargoCol[l]]));
       if (wantedOk.length) {
         const ok = match === 'all' ? wantedOk.every((w) => carried.indexOf(w) !== -1) : wantedOk.some((w) => carried.indexOf(w) !== -1);
-        if (!ok) return;
+        if (!ok) { drop.cargo++; return; }
       }
 
       rows.push({
@@ -505,7 +505,7 @@ module.exports = async (req, res) => {
       });
       if (authWanted) {
         if (au.ok) outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted);
-        else warnings.push('Authority filter ignored because authority data could not be loaded.');
+        else if (rows.length) warnings.push('Authority filter ignored because authority data could not be loaded.');
       }
     }
 
@@ -518,6 +518,7 @@ module.exports = async (req, res) => {
       total: total,
       plain: plain,
       pageSize: PAGE,
+      dropped: drop,
       nextOffset: raw.length === PAGE ? offset + PAGE : null,
       warnings: warnings
     });
