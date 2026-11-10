@@ -58,6 +58,8 @@ td select{padding:6px 8px;border-radius:8px}
 .bstats div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .bstats .val{font-size:22px}
 .eq{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap}
+.au{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap}
+.au-Active{background:#dcfce7;color:#15803d}.au-Inactive{background:#fee2e2;color:#b91c1c}.au-Pending{background:#fef3c7;color:#b45309}.au-Unknown{background:#f1f5f9;color:#64748b}
 .eq-Big{background:#e0e7ff;color:#3730a3}.eq-Power{background:#fef3c7;color:#b45309}.eq-Box{background:#ccfbf1;color:#0f766e}.eq-Multi{background:#dcfce7;color:#15803d}.eq-Unknown{background:#f1f5f9;color:#64748b}
 @media(max-width:640px){.stats,.grid{grid-template-columns:1fr}.bstats{grid-template-columns:repeat(2,1fr)}.stats div{border-right:0;border-bottom:1px solid var(--line)}table{display:block;overflow-x:auto}}
 </style>
@@ -80,6 +82,7 @@ td select{padding:6px 8px;border-radius:8px}
   <input id="bmin" type="number" min="0" placeholder="Minimum trucks" style="max-width:170px;flex:0 1 170px">
   <input id="bmax" type="number" min="0" placeholder="Maximum trucks" style="max-width:170px;flex:0 1 170px">
   <div class="chips" id="bequip"></div>
+  <select id="bauth"><option value="">Authority: Any</option><option value="active">Authority: Active</option><option value="inactive">Authority: Inactive</option></select>
   <select id="bmatch"><option value="any">Any selected cargo</option><option value="all">All selected cargo</option></select>
   <div class="chips" id="bcargo"></div>
   <button class="go" type="submit">Fetch carriers</button>
@@ -216,9 +219,9 @@ function bRender() {
     '<div><div class="lbl">With email</div><div class="val">' + withEmail + '</div></div>' +
     '<div><div class="lbl">With phone</div><div class="val">' + withPhone + '</div></div>' +
     '<div><div class="lbl">States</div><div class="val">' + Object.keys(states).length + '</div></div>';
-  $('bres').innerHTML = bulk.length ? '<table><tr><th>MC</th><th>Carrier / Company</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th></tr>' +
+  $('bres').innerHTML = bulk.length ? '<table><tr><th>MC</th><th>Carrier / Company</th><th>Phone</th><th>Email</th><th>Location</th><th>Equipment</th><th>Authority</th></tr>' +
     bulk.map(function (x) {
-      return '<tr><td class="mono">' + esc(x.mc || '—') + '</td><td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '—') + '</td><td>' + esc(loc(x)) + '</td><td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td></tr>';
+      return '<tr><td class="mono">' + esc(x.mc || '—') + '</td><td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td><td>' + esc(x.phone || x.cellPhone || '—') + '</td><td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '—') + '</td><td>' + esc(loc(x)) + '</td><td><span class="eq ' + eqClass(x.equipment) + '">' + esc(x.equipment) + '</span></td><td><span class="au au-' + esc(x.authority || 'Unknown') + '">' + esc(x.authority || 'Unknown') + '</span></td></tr>';
     }).join('') + '</table>' : '';
   $('btools').style.display = bulk.length || bNext !== null ? 'flex' : 'none';
   $('bmore').style.display = bNext !== null ? '' : 'none';
@@ -241,7 +244,7 @@ $('bf').addEventListener('submit', function (e) {
   var m = $('bmode').value;
   bBase = '/api/bulk?mode=' + m + '&from=' + encodeURIComponent(m === 'mc' ? $('bfrom').value : $('dfrom').value) + '&to=' + encodeURIComponent(m === 'mc' ? $('bto').value : $('dto').value) +
     '&min=' + encodeURIComponent($('bmin').value) + '&max=' + encodeURIComponent($('bmax').value) +
-    '&equip=' + encodeURIComponent(checked('bequip')) + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo'));
+    '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=' + $('bauth').value + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo'));
   bulk = []; bNext = null; bRender(); runBulk(0);
 });
 $('bmore').onclick = function () { if (bNext !== null) runBulk(bNext); };
@@ -255,8 +258,8 @@ $('bsave').onclick = function () {
   setLeads(l); renderLeads(); alert(n + ' new leads saved.');
 };
 $('bcsv').onclick = function () {
-  var rows = [['MC', 'USDOT', 'Company', 'DBA', 'Phone', 'Cell', 'Email', 'Officer', 'City', 'State', 'Equipment', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
-    bulk.map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.phone, x.cellPhone, x.email, x.officer, x.city, x.state, x.equipment, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; }));
+  var rows = [['MC', 'USDOT', 'Company', 'DBA', 'Phone', 'Cell', 'Email', 'Officer', 'City', 'State', 'Equipment', 'Authority', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
+    bulk.map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.phone, x.cellPhone, x.email, x.officer, x.city, x.state, x.equipment, x.authority, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; }));
   var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' }));
