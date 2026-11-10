@@ -1,14 +1,14 @@
 // Bulk carrier search from the FMCSA Company Census File (free, no key).
-// GET /api/bulk?mode=mc&from=181036&to=191036
+// GET /api/bulk?mode=mc&from=500000&to=505000
 // GET /api/bulk?mode=date&from=2026-11-05&to=2026-11-10
-// Optional: min, fleet=straight|tractor, cargo=General Freight|Household Goods, match=any|all, offset
-// Debug:    /api/bulk?debug=1  (shows the real column names of the Census file)
+// Optional: min, max (power units), equip=Big Equipment|Power Only|Box Truck|Multi Trucks,
+//           cargo=General Freight|Household Goods, match=any|all, offset
+// Debug:    /api/bulk?debug=1
 const DATASET = 'az4n-8mr2';
 const CENSUS = 'https://data.transportation.gov/resource/' + DATASET + '.json';
 const META = 'https://data.transportation.gov/api/views/' + DATASET + '.json';
 const PAGE = 1000;
 
-// Label shown on the site -> text found inside the Census cargo column name
 const CARGO = {
   'General Freight': 'genfreight',
   'Household Goods': 'house',
@@ -40,8 +40,7 @@ async function soda(params) {
   return r.json();
 }
 
-// The SODA JSON API leaves out null fields, so a single row does NOT show every column.
-// Read the full column list from the dataset metadata instead.
+// SODA JSON leaves out null fields, so read the full column list from the dataset metadata.
 async function getKeys() {
   if (keyCache && keyCache.length) return keyCache;
   let keys = [];
@@ -51,10 +50,8 @@ async function getKeys() {
       const m = await r.json();
       keys = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
     }
-  } catch (e) { /* fall through to sampling */ }
-
+  } catch (e) { /* fall back to sampling */ }
   if (!keys.length) {
-    // Fallback: union of keys over many rows, including rows that have a docket
     const set = {};
     const batches = await Promise.all([
       soda({ $limit: 200 }).catch(() => []),
@@ -76,6 +73,17 @@ const fmtPhone = (v) => {
 };
 const nextDay = (iso) => new Date(Date.parse(iso + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
 
+// Equipment label worked out from the fleet counts in the Census file
+function equipmentOf(tractors, trucks, trailers, units) {
+  if (tractors > 0 && trailers > 0) return 'Big Equipment';
+  if (tractors > 0) return 'Power Only';
+  if (trucks > 1) return 'Multi Trucks';
+  if (trucks === 1) return 'Box Truck';
+  if (units > 1) return 'Multi Trucks';
+  if (units === 1) return 'Box Truck';
+  return 'Unknown';
+}
+
 module.exports = async (req, res) => {
   try {
     const keys = await getKeys();
@@ -91,43 +99,62 @@ module.exports = async (req, res) => {
     const to = String(req.query.to || '').trim();
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const warnings = [];
-    const where = [];
 
-    if (has('status_code')) where.push("status_code='A'");
-
+    let f = '', t = '';
     let order = 'dot_number';
-    if (mode === 'mc') {
-      const f = from.replace(/\D/g, '');
-      const t = to.replace(/\D/g, '');
-      if (!f || !t) return res.status(400).json({ error: 'MC from aur to dono number likhein' });
-      if (f.length !== t.length) return res.status(400).json({ error: 'From aur To ke digits barabar hon (jaise 181036 se 191036)' });
-      if (t < f) return res.status(400).json({ error: 'To number From se bara hona chahiye' });
-      const parts = [];
-      [1, 2, 3].forEach((n) => {
-        const nk = 'docket' + n;
-        if (!has(nk)) return;
-        const pk = nk + 'prefix';
-        parts.push('(' + (has(pk) ? pk + "='MC' AND " : '') + nk + " >= '" + f + "' AND " + nk + " <= '" + t + "')");
-      });
-      if (!parts.length) {
-        return res.status(500).json({ error: 'Census file me docket (MC) column nahi mila. /api/bulk?debug=1 ka screenshot bhejein.' });
+
+    function buildWhere(useLen) {
+      const where = [];
+      if (has('status_code')) where.push("status_code='A'");
+      if (mode === 'mc') {
+        const parts = [];
+        [1, 2, 3].forEach((n) => {
+          const nk = 'docket' + n;
+          if (!has(nk)) return;
+          const pk = nk + 'prefix';
+          parts.push('(' + (has(pk) ? pk + "='MC' AND " : '') + nk + " >= '" + f + "' AND " + nk + " <= '" + t + "'" +
+            (useLen ? ' AND ' + nk + " like '" + '_'.repeat(f.length) + "'" : '') + ')');
+        });
+        where.push('(' + parts.join(' OR ') + ')');
+      } else {
+        where.push("add_date >= '" + from + "' AND add_date < '" + nextDay(to) + "'");
       }
-      where.push('(' + parts.join(' OR ') + ')');
-      order = has('docket1') ? 'docket1' : 'dot_number';
+      return where.join(' AND ');
+    }
+
+    if (mode === 'mc') {
+      f = from.replace(/\D/g, '');
+      t = to.replace(/\D/g, '');
+      if (!f || !t) return res.status(400).json({ error: 'Enter both From and To MC numbers' });
+      if (f.length !== t.length) return res.status(400).json({ error: 'From and To must have the same number of digits (e.g. 500000 to 505000)' });
+      if (t < f) return res.status(400).json({ error: 'To must be bigger than From' });
+      if (!has('docket1')) return res.status(500).json({ error: 'No docket (MC) column in Census file. Open /api/bulk?debug=1' });
+      order = 'docket1';
     } else {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-        return res.status(400).json({ error: 'Date YYYY-MM-DD format me do' });
+        return res.status(400).json({ error: 'Use YYYY-MM-DD dates' });
       }
-      if (!has('add_date')) return res.status(500).json({ error: 'Census file me add_date column nahi mila' });
-      where.push("add_date >= '" + from + "' AND add_date < '" + nextDay(to) + "'");
+      if (!has('add_date')) return res.status(500).json({ error: 'No add_date column in Census file' });
       order = 'add_date';
     }
 
-    const raw = await soda({ $where: where.join(' AND '), $order: order, $limit: PAGE, $offset: offset });
+    let raw;
+    if (mode === 'mc') {
+      // Ask Census for exact-length MCs only; if that filter is not accepted, fall back and filter here.
+      try {
+        raw = await soda({ $where: buildWhere(true), $order: order, $limit: PAGE, $offset: offset });
+        if (!raw.length && offset === 0) raw = await soda({ $where: buildWhere(false), $order: order, $limit: PAGE, $offset: offset });
+      } catch (e) {
+        raw = await soda({ $where: buildWhere(false), $order: order, $limit: PAGE, $offset: offset });
+      }
+    } else {
+      raw = await soda({ $where: buildWhere(false), $order: order, $limit: PAGE, $offset: offset });
+    }
 
     // Post filters
     const minUnits = parseInt(req.query.min, 10) || 0;
-    const fleet = String(req.query.fleet || '');
+    const maxUnits = parseInt(req.query.max, 10) || 0;
+    const equipWanted = String(req.query.equip || '').split('|').filter(Boolean);
     const wanted = String(req.query.cargo || '').split('|').filter(Boolean);
     const match = req.query.match === 'all' ? 'all' : 'any';
 
@@ -138,37 +165,57 @@ module.exports = async (req, res) => {
       if (k) cargoCol[label] = k;
     });
     wanted.forEach((w) => {
-      if (!cargoCol[w]) warnings.push('Cargo column "' + w + '" Census me nahi mila, is filter ko ignore kiya.');
+      if (!cargoCol[w]) warnings.push('Cargo "' + w + '" not found in Census, filter ignored.');
     });
     const wantedOk = wanted.filter((w) => cargoCol[w]);
 
     const tractKeys = keys.filter((k) => /^(own|trm|trp)tract/i.test(k));
     const truckKeys = keys.filter((k) => /^(own|trm|trp)truck/i.test(k));
-    if (fleet && !tractKeys.length && !truckKeys.length) {
-      warnings.push('Straight truck / tractor ka data Census me nahi mila, fleet filter ignore hua.');
+    const trailKeys = keys.filter((k) => /^(own|trm|trp)trail/i.test(k));
+    if (equipWanted.length && !tractKeys.length && !truckKeys.length) {
+      warnings.push('Fleet breakdown not found in Census, equipment filter ignored.');
     }
 
     const rows = [];
     raw.forEach((c) => {
-      const units = num(c.power_units);
-      if (units < minUnits) return;
+      // Only the MC that is inside the requested range
+      let mc = '';
+      if (mode === 'mc') {
+        for (let n = 1; n <= 3; n++) {
+          const d = String(c['docket' + n] || '').trim();
+          const p = String(c['docket' + n + 'prefix'] || 'MC').toUpperCase();
+          if (p === 'MC' && d.length === f.length && d >= f && d <= t) { mc = 'MC' + d; break; }
+        }
+        if (!mc) return;
+      } else {
+        for (let n = 1; n <= 3; n++) {
+          const d = String(c['docket' + n] || '').trim();
+          const p = String(c['docket' + n + 'prefix'] || 'MC').toUpperCase();
+          if (d && p === 'MC') { mc = 'MC' + d; break; }
+        }
+      }
+
       const tractors = tractKeys.reduce((s, k) => s + num(c[k]), 0);
       const trucks = truckKeys.reduce((s, k) => s + num(c[k]), 0);
-      if (fleet === 'straight' && (tractKeys.length || truckKeys.length) && !(trucks > 0 && tractors === 0)) return;
-      if (fleet === 'tractor' && (tractKeys.length || truckKeys.length) && !(tractors > 0)) return;
+      const trailers = trailKeys.reduce((s, k) => s + num(c[k]), 0);
+      const units = num(c.power_units) || tractors + trucks;
+      if (units < minUnits) return;
+      if (maxUnits && units > maxUnits) return;
+
+      const equipment = equipmentOf(tractors, trucks, trailers, units);
+      if (equipWanted.length && (tractKeys.length || truckKeys.length) && equipWanted.indexOf(equipment) === -1) return;
+
       const carried = Object.keys(cargoCol).filter((l) => yes(c[cargoCol[l]]));
       if (wantedOk.length) {
         const ok = match === 'all' ? wantedOk.every((w) => carried.indexOf(w) !== -1) : wantedOk.some((w) => carried.indexOf(w) !== -1);
         if (!ok) return;
       }
-      const mcs = [1, 2, 3]
-        .map((n) => (c['docket' + n] ? (c['docket' + n + 'prefix'] || 'MC') + c['docket' + n] : ''))
-        .filter(Boolean);
+
       rows.push({
         dot: c.dot_number,
-        mc: mcs,
-        name: c.dba_name || c.legal_name || '',
-        legalName: c.legal_name || '',
+        mc: mc,
+        name: c.legal_name || c.dba_name || '',
+        dba: c.dba_name || '',
         phone: fmtPhone(c.phone),
         cellPhone: fmtPhone(c.cell_phone),
         email: (c.email_address || '').toLowerCase(),
@@ -177,12 +224,16 @@ module.exports = async (req, res) => {
         drivers: num(c.total_drivers),
         tractors: tractors,
         straightTrucks: trucks,
+        trailers: trailers,
+        equipment: equipment,
         cargo: carried,
         city: c.phy_city || '',
         state: c.phy_state || '',
         addDate: day(c.add_date)
       });
     });
+
+    if (mode === 'mc') rows.sort((a, b) => a.mc.localeCompare(b.mc));
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
