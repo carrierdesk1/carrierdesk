@@ -170,6 +170,26 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
   .hero{height:150px;padding:20px 16px 0}.hero .wm{font-size:32px}.pad{padding:0 12px 30px}
   .um{top:10px;right:10px}.stats,.grid{grid-template-columns:1fr}.stats div{border-right:0;border-bottom:1px solid var(--line)}
 }
+
+.cc{background:#fff;border:1px solid #e2e8f0;border-radius:16px;margin:16px 0;overflow:hidden;box-shadow:0 4px 18px rgba(15,23,42,.06)}
+.cc-h{padding:20px 24px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid #e2e8f0}
+.cc-h h2{margin:0;font-size:24px;letter-spacing:-.02em;color:#0f172a}
+.cc-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start}
+.cc-chip{display:inline-block;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:600;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155}
+.cc-chip.ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857}.cc-chip.bad{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
+.cc-st{font-weight:700;font-size:14px;margin-top:8px}.cc-st.ok{color:#047857}.cc-st.bad{color:#b91c1c}
+.cc-b{padding:20px 24px}
+.cc-tiles{display:grid;grid-template-columns:repeat(3,1fr);background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:22px}
+.cc-tiles>div{padding:14px 18px;border-right:1px solid #e2e8f0}.cc-tiles>div:last-child{border:0}
+.cc-tv{font-size:20px;font-weight:800;margin-top:6px;color:#0f172a}.cc-tv.ok{color:#047857}.cc-tv.bad{color:#94a3b8}
+.cc-sec{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#64748b;font-weight:700;margin:22px 0 12px;padding-bottom:8px;border-bottom:1px solid #e2e8f0}
+.cc-g{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 24px}
+.cc-g .val{font-size:15px;font-weight:500;word-break:break-word}
+.cc-cargo{display:flex;gap:6px;flex-wrap:wrap}
+.cc-act{display:flex;gap:8px;flex-wrap:wrap;padding:0 24px 22px}
+.cc-act button,.cc-act a{background:#0f172a;color:#fff;border:1px solid #0f172a;border-radius:10px;padding:9px 16px;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
+.cc-act .alt{background:#fff;color:#0f172a;border-color:#cbd5e1}
+@media(max-width:760px){.cc-tiles,.cc-g{grid-template-columns:1fr}.cc-tiles>div{border-right:0;border-bottom:1px solid #e2e8f0}}
 </style>
 </head>
 <body>
@@ -554,45 +574,71 @@ function ins(c) {
   if (i.bipdOnFile > 0) return { t: 'On File', s: 'BIPD $' + i.bipdOnFile.toLocaleString() + 'K' + (i.bipdRequired ? ' (req. $' + i.bipdRequired + 'K)' : ''), bad: false };
   return { t: 'Not on File', s: 'No active insurance', bad: true };
 }
-function contact(c) {
-  if (!c.censusFound) return '<div class="contact"><div class="small">No contact data found in the FMCSA Census file for this carrier.</div></div>';
-  var email = c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '—';
-  var phone = c.phone ? '<a href="tel:' + esc(c.phone.replace(/\D/g, '')) + '">' + esc(c.phone) + '</a>' : '—';
-  var cell = c.cellPhone ? '<a href="tel:' + esc(c.cellPhone.replace(/\D/g, '')) + '">' + esc(c.cellPhone) + '</a>' : '—';
-  var officers = [c.officer1, c.officer2].filter(Boolean).join(', ') || '—';
-  return '<div class="contact"><div class="grid">' +
-    '<div><div class="lbl">Email</div><div class="val">' + email + '</div></div>' +
-    '<div><div class="lbl">Phone</div><div class="val">' + phone + '</div></div>' +
-    '<div><div class="lbl">Cell phone</div><div class="val">' + cell + '</div></div>' +
-    '<div><div class="lbl">Officers</div><div class="val">' + esc(officers) + '</div></div>' +
-    '<div><div class="lbl">MCS-150 date</div><div class="val">' + esc(c.mcs150Date || '—') + '</div></div>' +
-    '<div><div class="lbl">In FMCSA census since</div><div class="val">' + esc(c.censusAddDate || '—') + '</div></div>' +
-    '</div></div>';
+function ccDate(v) {
+  if (!v) return null; v = String(v).trim(); var m, d;
+  if ((m = v.match(/^(\d{4})(\d{2})(\d{2})/))) d = new Date(+m[1], +m[2] - 1, +m[3]);
+  else if ((m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) d = new Date(+m[3], +m[1] - 1, +m[2]);
+  else d = new Date(v);
+  return isNaN(d) ? null : d;
 }
+function ccAge(d) {
+  var mo = (new Date().getFullYear() - d.getFullYear()) * 12 + new Date().getMonth() - d.getMonth();
+  if (mo < 0) mo = 0; var y = Math.floor(mo / 12), r = mo % 12;
+  return (y ? y + 'y ' : '') + r + 'm';
+}
+function ccF(l, v, raw) { return '<div><div class="lbl">' + l + '</div><div class="val">' + (raw ? v : esc(v || '—')) + '</div></div>'; }
 function card(c, idx) {
-  var a = c.authorized, n = ins(c), inactive = c.common !== 'Active';
-  return '<div class="card"><div class="top"><div><h2>' + esc(c.name) + '</h2>' +
-    '<div class="sub">Legal name: ' + esc(c.legalName) + '</div>' +
-    '<div class="auth" style="color:' + (c.common === 'Active' ? '#16a34a' : '#dc2626') + '">' + (c.common === 'Active' ? '✔' : '✖') + ' Common Authority: ' + esc(c.common) + '</div></div>' +
-    '<div><span class="badge ' + (a ? 'ok' : 'bad') + '">' + (a ? 'Authorized to operate' : 'Not authorized to operate') + '</span>' +
-    (c.oos ? '<span class="badge bad">Out of service</span>' : '') + '</div></div>' +
-    '<div class="stats">' +
-    '<div><div class="lbl">Insurance</div><div class="val" style="color:' + (n.bad ? '#94a3b8' : '#16a34a') + '">' + n.t + '</div><div class="small">' + esc(n.s) + '</div></div>' +
-    '<div><div class="lbl">Fleet size</div><div class="val">' + c.powerUnits + ' Power Units</div><div class="small">' + c.drivers + ' Drivers</div></div>' +
-    '<div><div class="lbl">Authority</div><div class="val">' + (inactive ? 'Inactive' : 'Active') + '</div><div class="small">Contract: ' + esc(c.contract) + ' · Broker: ' + esc(c.broker) + '</div></div></div>' +
-    '<div class="grid">' +
-    '<div><div class="lbl">USDOT</div><div class="val">' + esc(c.dot) + '</div></div>' +
-    '<div><div class="lbl">MC docket</div><div class="val">' + esc(c.mc.join(', ') || '—') + '</div></div>' +
-    '<div><div class="lbl">Carrier operation</div><div class="val">' + esc(c.operation || '—') + '</div></div>' +
-    '<div><div class="lbl">Operation class</div><div class="val">' + esc(c.operationClass || '—') + '</div></div>' +
-    '<div><div class="lbl">Business org</div><div class="val">' + esc(c.businessOrg || '—') + '</div></div>' +
-    '<div><div class="lbl">Reported mileage</div><div class="val">' + esc(c.mileage || '0') + ' mi</div></div>' +
-    '<div><div class="lbl">Cargo</div><div class="val">' + esc((c.cargo || []).join(', ') || '—') + '</div></div>' +
-    '<div><div class="lbl">Safety rating</div><div class="val">' + esc(c.safetyRating || 'Not rated') + '</div></div>' +
-    '<div><div class="lbl">Crashes</div><div class="val">' + c.crashTotal + '</div></div>' +
-    '<div><div class="lbl">Physical address</div><div class="val">' + (c.address ? '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/' + encodeURIComponent(c.address) + '">' + esc(c.address) + '</a>' : '—') + '</div></div>' +
-    '</div>' + contact(c) +
-    '<div class="act"><button type="button" onclick="save(' + idx + ')">Save lead</button></div></div>';
+  var a = c.authorized, n = ins(c), act = c.common === 'Active';
+  var since = ccDate(c.authSince || c.censusAddDate);
+  var tel = function (x) { return x ? '<a href="tel:' + esc(String(x).replace(/\D/g, '')) + '">' + esc(x) + '</a>' : '—'; };
+  var mail = c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '—';
+  var map = function (x) { return x ? '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/' + encodeURIComponent(x) + '">' + esc(x) + ' ↗</a>' : '—'; };
+  var officers = [c.officer1, c.officer2].filter(Boolean).join(', ');
+  var wa = String(c.cellPhone || c.phone || '').replace(/\D/g, '');
+  if (wa.length === 10) wa = '1' + wa;
+  return '<div class="cc"><div class="cc-h"><div><h2>' + esc(c.name) + '</h2>' +
+    (c.legalName && c.legalName !== c.name ? '<div class="sub">Legal name: ' + esc(c.legalName) + '</div>' : '') +
+    '<div class="cc-st ' + (act ? 'ok' : 'bad') + '">' + (act ? '✔' : '✖') + ' Common Authority: ' + esc(c.common) + '</div>' +
+    (since ? '<div class="small" style="margin-top:4px">Active for <b>' + ccAge(since) + '</b> · since ' + (since.getMonth() + 1) + '/' + since.getDate() + '/' + since.getFullYear() + '</div>' : '') + '</div>' +
+    '<div class="cc-chips"><span class="cc-chip ' + (a ? 'ok' : 'bad') + '">' + (a ? 'Authorized to operate' : 'Not authorized') + '</span>' +
+    (c.oos ? '<span class="cc-chip bad">Out of service</span>' : '') + '</div></div>' +
+    '<div class="cc-b"><div class="cc-tiles">' +
+    '<div><div class="lbl">Insurance</div><div class="cc-tv ' + (n.bad ? 'bad' : 'ok') + '">' + n.t + '</div><div class="small">' + esc(n.s) + '</div></div>' +
+    '<div><div class="lbl">Fleet size</div><div class="cc-tv">' + c.powerUnits + ' Power Units</div><div class="small">' + c.drivers + ' Drivers</div></div>' +
+    '<div><div class="lbl">Authority</div><div class="cc-tv">' + (act ? 'Active' : 'Inactive') + '</div><div class="small">Contract: ' + esc(c.contract) + ' · Broker: ' + esc(c.broker) + '</div></div></div>' +
+    '<div class="cc-sec" style="margin-top:0">Identifiers &amp; classification</div><div class="cc-g">' +
+    ccF('USDOT', c.dot) + ccF('MC docket', (c.mc || []).join(', ')) + ccF('Carrier operation', c.operation) +
+    ccF('Operation class', c.operationClass) + ccF('Business org', c.businessOrg) + ccF('Reported mileage', (c.mileage || '0') + ' mi') +
+    ccF('MCS-150 date', c.mcs150Date) + ccF('In FMCSA since', c.censusAddDate) + ccF('Safety rating', c.safetyRating || 'Not rated') +
+    ccF('Crashes', String(c.crashTotal || 0)) + '</div>' +
+    '<div class="cc-sec">Cargo</div><div class="cc-cargo">' +
+    ((c.cargo || []).length ? c.cargo.map(function (x) { return '<span class="cc-chip">' + esc(x) + '</span>'; }).join('') : '<span class="small">—</span>') + '</div>' +
+    '<div class="cc-sec">Contact information' + (c.enriching ? ' <span class="small" style="text-transform:none;letter-spacing:0">(loading…)</span>' : '') + '</div><div class="cc-g">' +
+    ccF('Primary officer', officers) + ccF('Email', mail, 1) + ccF('Phone', tel(c.phone), 1) +
+    ccF('Cell phone', tel(c.cellPhone), 1) + ccF('Physical address', map(c.address), 1) + ccF('Mailing address', map(c.mailing), 1) + '</div>' +
+    (!c.censusFound && !c.email && !c.phone && !c.enriching ? '<div class="small" style="margin-top:12px">No contact data found for this carrier.</div>' : '') +
+    '</div><div class="cc-act"><button type="button" onclick="save(' + idx + ')">Save lead</button>' +
+    (c.phone || c.cellPhone ? '<a class="alt" href="tel:' + esc(String(c.phone || c.cellPhone).replace(/\D/g, '')) + '">📞 Call</a>' : '') +
+    (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">💬 WhatsApp</a>' : '') +
+    (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '">✉ Email</a>' : '') + '</div></div>';
+}
+/* fills missing contact/cargo data live from the FMCSA census open-data API (best effort, silent on failure) */
+var CC_CARGO = { crgo_genfreight: 'General Freight', crgo_household: 'Household Goods', crgo_metalsheet: 'Metal Sheets/Coils', crgo_motoveh: 'Motor Vehicles', crgo_drivetow: 'Drive/Tow Away', crgo_logpole: 'Logs/Poles/Lumber', crgo_bldgmat: 'Building Materials', crgo_mobilehome: 'Mobile Homes', crgo_machlrg: 'Machinery/Large Objects', crgo_produce: 'Fresh Produce', crgo_liqgas: 'Liquids/Gases', crgo_intermodal: 'Intermodal', crgo_oilfield: 'Oilfield Equipment', crgo_livestock: 'Livestock', crgo_grainfeed: 'Grain/Feed', crgo_coalcoke: 'Coal/Coke', crgo_meat: 'Meat', crgo_garbage: 'Garbage/Refuse', crgo_chem: 'Chemicals', crgo_drybulk: 'Commodities Dry Bulk', crgo_coldfood: 'Refrigerated Food', crgo_beverages: 'Beverages', crgo_paperprod: 'Paper Products', crgo_utility: 'Utilities', crgo_farmsupp: 'Farm Supplies', crgo_construct: 'Construction', crgo_waterwell: 'Water Well', crgo_cargoothr: 'Other' };
+function ccEnrich(c) {
+  var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 7000);
+  return fetch('https://data.transportation.gov/resource/az4n-8mr2.json?$limit=1&dot_number=' + encodeURIComponent(c.dot), { signal: ctl.signal })
+    .then(function (r) { return r.json(); })
+    .then(function (a) {
+      clearTimeout(t); var d = a && a[0]; if (!d) return;
+      var P = function (k, v) { if (v && !c[k]) c[k] = v; };
+      P('phone', d.telephone); P('email', d.email_address); P('officer1', d.company_officer_1); P('officer2', d.company_officer_2);
+      P('mcs150Date', d.mcs150_date && String(d.mcs150_date).slice(0, 10)); P('censusAddDate', d.add_date && String(d.add_date).slice(0, 10));
+      P('businessOrg', d.business_org_desc); P('operationClass', d.classdef);
+      var m = [d.mailing_street, d.mailing_city, d.mailing_state, d.mailing_zip].filter(Boolean).join(', ');
+      P('mailing', m);
+      if (!(c.cargo || []).length) c.cargo = Object.keys(CC_CARGO).filter(function (k) { return d[k] === 'X'; }).map(function (k) { return CC_CARGO[k]; });
+      c.censusFound = true;
+    }).catch(function () { clearTimeout(t); });
 }
 function save(i) {
   var c = found[i], l = getLeads();
@@ -611,6 +657,9 @@ $('f').addEventListener('submit', function (e) {
       found = x.d.results || [];
       $('msg').textContent = found.length ? found.length + ' result(s)' : 'No carrier found.';
       $('results').innerHTML = found.map(card).join('');
+      found.slice(0, 10).forEach(function (c) { c.enriching = true; });
+      $('results').innerHTML = found.map(card).join('');
+      Promise.all(found.slice(0, 10).map(function (c) { return ccEnrich(c).then(function () { c.enriching = false; }); })).then(function () { $('results').innerHTML = found.map(card).join(''); });
     })
     .catch(function () { $('msg').className = 'err'; $('msg').textContent = 'Could not reach the server. Is the site deployed with /api?'; });
 });
