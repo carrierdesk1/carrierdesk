@@ -99,7 +99,23 @@ async function socrata(url, ms, tries, label) {
   return r.json();
 }
 
-const soda = (params, ms, tries) => gate(() => socrata(CENSUS + '?' + qsOf(params), ms, tries, 'Census'));
+// Cache: the same query is answered from memory for 10 min (page load, retries and alerts no longer hit Socrata again).
+const qCache = {};      // url -> { t, data }
+const qInflight = {};   // url -> promise (identical requests at the same time share ONE call)
+const Q_TTL = 10 * 60 * 1000;
+function cached(url, ms, tries, label, ttl) {
+  const hit = qCache[url];
+  if (hit && Date.now() - hit.t < (ttl || Q_TTL)) return Promise.resolve(hit.data);
+  if (qInflight[url]) return qInflight[url];
+  const p = gate(() => socrata(url, ms, tries, label)).then((data) => {
+    if (Object.keys(qCache).length > 300) { for (const k in qCache) delete qCache[k]; }
+    qCache[url] = { t: Date.now(), data: data };
+    return data;
+  }).finally(() => { delete qInflight[url]; });
+  qInflight[url] = p;
+  return p;
+}
+const soda = (params, ms, tries, ttl) => cached(CENSUS + '?' + qsOf(params), ms, tries, 'Census', ttl);
 
 // SODA JSON leaves out null fields, so read the full column list from the dataset metadata.
 async function getKeys() {
@@ -179,7 +195,7 @@ const MOTUS_META = 'https://data.transportation.gov/api/views/inys-ebih.json';
 let motusKeyCache = null;
 const authCache = {}; // dot -> { t, rows }
 
-const sodaAt = (base, params, ms, tries) => gate(() => socrata(base + '?' + qsOf(params), ms, tries || 3, 'Motus'));
+const sodaAt = (base, params, ms, tries) => cached(base + '?' + qsOf(params), ms, tries || 3, 'Motus');
 
 async function getMotusKeys() {
   if (motusKeyCache && motusKeyCache.length) return motusKeyCache;
@@ -406,9 +422,10 @@ module.exports = async (req, res) => {
     if (req.query.mode === 'latest') {
       const who3 = await requireUser(req, res);
       if (who3 === null) return;
-      const lr = await soda({ $select: 'max(add_date)' }).catch(() => []);
+      const lr = await soda({ $select: 'add_date', $order: 'add_date DESC', $where: 'add_date IS NOT NULL', $limit: 1 }, 15000, 2, 6 * 3600 * 1000).catch(() => []);
       const lv = lr && lr[0] ? Object.values(lr[0])[0] : '';
-      res.setHeader('Cache-Control', 'no-store');
+      if (lv) res.setHeader('Cache-Control', 'private, max-age=3600');
+      else res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ latest: day(lv) });
     }
 
@@ -497,7 +514,7 @@ module.exports = async (req, res) => {
     }
     async function getCount(where) {
       try {
-        const r = await soda({ $select: 'count(*)', $where: where }, 12000, 1);
+        const r = await soda({ $select: 'count(*)', $where: where }, 10000, 1, 30 * 60 * 1000);
         const n = parseInt(r && r[0] ? Object.values(r[0])[0] : '', 10);
         return isFinite(n) ? n : null;
       } catch (e) { return null; }
