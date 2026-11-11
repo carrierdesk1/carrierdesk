@@ -288,6 +288,30 @@ module.exports = async (req, res) => {
   const key = process.env.FMCSA_WEBKEY;
   if (!key) return res.status(500).json({ error: 'FMCSA_WEBKEY is not set' });
 
+  // Diagnostic: /api/carrier?debug=1  (token value is never shown)
+  if (String(req.query.debug || '') === '1') {
+    const t = cleanToken();
+    const probe = async (headers) => {
+      try {
+        const r = await fetch(CENSUS + '?$limit=1&$select=dot_number', { headers, signal: AbortSignal.timeout(8000) });
+        const body = (await r.text()).slice(0, 200);
+        return { status: r.status, body: body };
+      } catch (e) {
+        return { error: String(e && e.message) };
+      }
+    };
+    const withTok = t ? await probe({ 'X-App-Token': t }) : 'no token set';
+    const noTok = await probe({});
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({
+      tokenSet: !!t,
+      tokenLength: t.length,
+      tokenMarkedBadInThisInstance: tokenBad,
+      withToken: withTok,
+      withoutToken: noTok
+    });
+  }
+
   const type = String(req.query.type || 'mc');
   const q = String(req.query.q || '').trim();
   if (!q) return res.status(400).json({ error: 'missing query' });
