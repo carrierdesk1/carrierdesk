@@ -343,11 +343,11 @@ module.exports = async (req, res) => {
         } catch (e) { return { error: String(e && e.message), ms: Date.now() - st }; }
       };
       const out = {
-        tokenSet: !!t,
-        tokenLength: t.length,
-        withToken: t ? await probe({ 'X-App-Token': t }, '$limit=1&$select=dot_number') : 'no token set in Vercel',
+        tokenSet: !!t0,
+        tokenLength: t0.length,
+        withToken: t0 ? await probe({ 'X-App-Token': t0 }, '$limit=1&$select=dot_number') : 'no token set in Vercel',
         withoutToken: await probe({}, '$limit=1&$select=dot_number'),
-        dateQuery: await probe(t ? { 'X-App-Token': t } : {}, '$limit=5&$select=dot_number&$order=add_date&$where=' + encodeURIComponent("status_code='A' AND add_date >= '" + new Date().toISOString().slice(0, 8) + "01'"))
+        dateQuery: await probe(t0 ? { 'X-App-Token': t0 } : {}, '$limit=5&$select=dot_number&$order=add_date&$where=' + encodeURIComponent("status_code='A' AND add_date >= '" + new Date().toISOString().slice(0, 8) + "01'"))
       };
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json(out);
