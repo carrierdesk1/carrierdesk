@@ -922,7 +922,8 @@ $('bf').addEventListener('submit', function (e) {
     '&min=' + encodeURIComponent($('bmin').value) + '&max=' + encodeURIComponent($('bmax').value) +
     '&equip=' + encodeURIComponent(checked('bequip')) + '&auth=&noauth=1' + '&match=' + $('bmatch').value + '&cargo=' + encodeURIComponent(checked('bcargo')) +
     '&state=' + encodeURIComponent($('bstate').value) + '&city=' + encodeURIComponent($('bcity').value) +
-    '&hasemail=' + ($('bhasemail').checked ? '1' : '0') + '&hasphone=' + ($('bhasphone').checked ? '1' : '0');
+    '&hasemail=' + ($('bhasemail').checked ? '1' : '0') + '&hasphone=' + ($('bhasphone').checked ? '1' : '0') +
+    (m === 'date' && $('bauth').value ? '&onlymc=1' : '');
   bRun++; bulk = []; bSeen = {}; bQueue = []; bActive = 0; bDone = 0; bTotal = null; bPlain = false;
   bNote = bNoteNext; bNoteNext = ''; bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bErr = ''; bStop = false; bPage = 1;
   bStart();
