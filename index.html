@@ -332,7 +332,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <div class="bw" style="margin-bottom:18px"><div id="tstats"></div></div>
       <h3>Team</h3>
       <div class="notice">Team members share one list of leads and have full access. Other signups are customers on the Free plan; search their email below and press +30 days after you receive their payment.</div>
-      <input id="tq" placeholder="Search customer by email or name" oninput="tShow()" style="width:100%;margin-bottom:10px">
+      <div style="display:flex;gap:8px;margin-bottom:10px"><input id="tq" placeholder="Search customer by email or name" oninput="tShow()" onkeydown="if(event.key==='Enter')tLoad()" style="flex:1"><button type="button" onclick="tLoad()">🔍 Search</button><button type="button" onclick="$('tq').value='';tLoad()">↻ Refresh</button></div>
       <div class="bw"><div id="tlist"></div></div>
     </section>
 
@@ -637,7 +637,7 @@ $('bmode').onchange = function () {
 (function () { var t = new Date(), f = new Date(t.getTime() - 5 * 86400000); function iso(d) { return d.toISOString().slice(0, 10); } $('dfrom').value = iso(f); $('dto').value = iso(t); })();
 
 var PAGE_SIZE = 500;
-var bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
+var bErr = '', bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
 var bNote = '', bNoteNext = '', bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
 var FETCH_CONC = 5, AUTH_CONC = 4, AUTH_CHUNK = 60;
@@ -671,6 +671,8 @@ function bStatus() {
   if (bDrop.units || bDrop.equip || bDrop.cargo || bDrop.auth) t += ' · removed by your filters → trucks: ' + bDrop.units + ', equipment: ' + bDrop.equip + ', cargo: ' + bDrop.cargo + ', authority: ' + bDrop.auth;
   if (bNote) t += ' · ' + bNote;
   if (bWarn.length) t += ' · ' + bWarn.join(' ');
+  if (bErr) t += ' · ⚠ ERROR: ' + bErr;
+  $('bmsg').className = bErr ? 'err' : '';
   $('bmsg').textContent = t;
 }
 function bSoon() { if (bTimer) return; bTimer = setTimeout(function () { bTimer = null; bRender(); }, 250); }
@@ -879,8 +881,7 @@ function bPump() {
       }).catch(function (e) {
         if (run !== bRun) return;
         bActive--; bQueue.unshift(off); bStop = true;
-        $('bmsg').className = 'err';
-        $('bmsg').textContent = (e.message || 'Connection problem') + ' — press "Load more" to continue.';
+        bErr = (e.message || 'Connection problem') + ' — press "Load more" to continue.'; bStatus();
         bCheckDone();
       });
     })(bQueue.shift());
@@ -918,11 +919,11 @@ $('bf').addEventListener('submit', function (e) {
     '&state=' + encodeURIComponent($('bstate').value) + '&city=' + encodeURIComponent($('bcity').value) +
     '&hasemail=' + ($('bhasemail').checked ? '1' : '0') + '&hasphone=' + ($('bhasphone').checked ? '1' : '0');
   bRun++; bulk = []; bSeen = {}; bQueue = []; bActive = 0; bDone = 0; bTotal = null; bPlain = false;
-  bNote = bNoteNext; bNoteNext = ''; bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bStop = false; bPage = 1;
+  bNote = bNoteNext; bNoteNext = ''; bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }; bAuthQ = []; bAuthActive = 0; bInsQ = []; bInsActive = 0; bSel = {}; bScanned = 0; bWarn = []; bErr = ''; bStop = false; bPage = 1;
   bStart();
 });
 $('bstop').onclick = function () { bStop = true; $('bstop').style.display = 'none'; };
-$('bmore').onclick = function () { if (bQueue.length && !bLoading) { bStop = false; $('bmsg').className = ''; bPump(); } };
+$('bmore').onclick = function () { if (bQueue.length && !bLoading) { bStop = false; bErr = ''; $('bmsg').className = ''; bPump(); } };
 $('bpsz').onchange = function () { PAGE_SIZE = parseInt($('bpsz').value, 10) || 500; bPage = 1; bRender(); };
 $('bsave').onclick = function () {
   var l = getLeads(), n = 0, have = {};
@@ -1411,15 +1412,17 @@ function teamInit() {
 }
 var tCache = [];
 function tLoad() {
+  $('tlist').innerHTML = '<p class="small" style="padding:14px">Loading…</p>';
   sb.from('profiles').select('*').order('created_at').then(function (r) {
     if (r.error) { $('tlist').innerHTML = '<p class="small err" style="padding:14px">' + esc(r.error.message) + '</p>'; return; }
-    tCache = r.data; tShow();
+    tCache = r.data || []; tShow();
   });
 }
-function tShow() {
+function tShow() { try { tShow2(); } catch (e) { $('tlist').innerHTML = '<p class="small err" style="padding:14px">Team list error: ' + esc(e.message) + '</p>'; } }
+function tShow2() {
   var q = ($('tq').value || '').trim().toLowerCase();
   var rows = tCache.filter(function (m) { return !q || String(m.email || '').toLowerCase().indexOf(q) !== -1 || String(m.name || '').toLowerCase().indexOf(q) !== -1; });
-  if (!rows.length) { $('tlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email.</p>'; return; }
+  if (!rows.length) { $('tlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email. (' + tCache.length + ' accounts loaded in total)</p>'; return; }
   $('tlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
     var me = m.id === session.user.id, live = m.plan === 'paid' && m.plan_expires && Date.parse(m.plan_expires) > Date.now();
     var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free';
