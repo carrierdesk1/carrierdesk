@@ -1,5 +1,5 @@
 {
-  "regions": ["iad1"],
+  "regions": ["sfo1"],
   "functions": {
     "api/bulk.js": { "maxDuration": 60 }
   }
