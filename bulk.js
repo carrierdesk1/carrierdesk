@@ -36,7 +36,12 @@ async function soda(params) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
-  const r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000), headers: tokenHeaders() });
+  let r;
+  for (let i = 0; i < 4; i++) {
+    r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000), headers: tokenHeaders() });
+    if (r.status !== 429 && r.status < 500) break;
+    await new Promise((ok) => setTimeout(ok, 600 * (i + 1) + Math.random() * 400)); // throttled: wait, then retry
+  }
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     throw new Error('Census API status ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
