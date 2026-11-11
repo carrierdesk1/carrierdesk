@@ -207,6 +207,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <a href="#" data-view="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Dashboard</a>
       <a href="#" data-view="leads"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>My Leads<span class="bd" id="leadBadge">0</span></a>
       <a href="#" data-view="track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Carrier Tracker</a>
+      <a href="#" data-view="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Documents</a>
       <a href="#" id="navLogout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Logout</a>
     </nav>
     <div class="sp"></div>
@@ -302,6 +303,19 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <div id="tlist"></div>
     </section>
 
+    <!-- Documents -->
+    <section id="viewDocs" class="pad" style="display:none;margin-top:24px">
+      <h3>Carrier Documents</h3>
+      <div class="notice">Enter any carrier's MC or DOT number. Below you get the FMCSA authority page and the W-9 form for that carrier.</div>
+      <form id="df" class="panel searchbar">
+        <select id="dtype"><option value="mc">MC number</option><option value="dot">DOT number</option></select>
+        <input id="dq" placeholder="Enter MC or DOT number" inputmode="numeric" required>
+        <button class="go" type="submit">🔍 Search</button>
+      </form>
+      <div id="dmsg"></div>
+      <div id="dfound"></div>
+    </section>
+
     <!-- My leads -->
     <section id="viewLeads" class="pad" style="display:none;margin-top:24px">
       <h3>My leads</h3>
@@ -314,6 +328,16 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
   </div>
 </div>
 
+<div class="mo" id="dmo"><div class="mbox">
+<h3>📄 Carrier documents</h3><div class="small" id="dtitle"></div>
+<label class="fl">Your company</label><input type="text" id="dco" value="M&amp;H Dispatch Solutions">
+<label class="fl">Representative</label><input type="text" id="drep" value="Jax Carter">
+<label class="fl">Dispatch fee % of gross</label><input type="text" id="dfee" value="8">
+<label class="fl">Governing law (state)</label><input type="text" id="dlaw" placeholder="e.g. Texas">
+<div class="mrow"><button type="button" class="go" onclick="dAgr()">Dispatch Agreement</button><button type="button" onclick="dW9()">W-9 sheet (pre-filled)</button><button type="button" onclick="dW9msg()">W-9 request (WhatsApp)</button><button type="button" onclick="dMC()">MC authority summary</button><button type="button" onclick="dLI()">FMCSA authority page</button><button type="button" onclick="dProf()">Carrier profile sheet</button></div>
+<h3 style="margin-top:18px">Checklist and uploads</h3><div id="dlist"></div>
+<div class="mrow"><button type="button" id="dclose" style="margin-left:auto" onclick="$('dmo').style.display='none'">Close</button></div>
+</div></div>
 <div class="mo" id="emo">
   <div class="mbox">
     <h3>✉ Email carriers</h3>
@@ -443,6 +467,7 @@ function showView(v) {
   $('viewDash').style.display = v === 'dash' ? '' : 'none';
   $('viewLeads').style.display = v === 'leads' ? '' : 'none';
   $('viewTrack').style.display = v === 'track' ? '' : 'none';
+  $('viewDocs').style.display = v === 'docs' ? '' : 'none';
   Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) { a.className = a.getAttribute('data-view') === v ? 'on' : ''; });
   if (v === 'leads') renderLeads();
   if (v === 'track') tRender();
@@ -477,7 +502,7 @@ function renderLeads() {
       opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
       '</select></td><td class="lt" style="min-width:140px"><input type="date" value="' + esc(x.follow || '') + '" onchange="setField(' + i + ',\'follow\',this.value);renderLeads()"></td>' +
       '<td class="lt" style="min-width:200px"><input type="text" placeholder="Notes…" value="' + esc(x.note || '') + '" onchange="setField(' + i + ',\'note\',this.value)"></td>' +
-      '<td><button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
+      '<td><button type="button" onclick="docLead(' + i + ')">📄 Docs</button> <button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
   }).join('');
   $('leads').innerHTML = '<p class="small" style="padding:12px 16px 0">' + (due ? '⏰ Follow-ups due: <b>' + due + '</b> (highlighted)' : 'No follow-ups due.') + '</p>' +
     '<table><tr><th>Name</th><th>MC / DOT</th><th>Officer</th><th>Email / Phone</th><th>Status</th><th>Follow-up</th><th>Notes</th><th></th></tr>' + rows + '</table>';
@@ -714,7 +739,7 @@ function bRender() {
     slice.map(function (x) {
       var h2 = '<tr><td><input type="checkbox" class="rs" data-k="' + esc(x._k) + '"' + (bSel[x._k] ? ' checked' : '') + '></td>' +
         '<td class="mono">' + esc(x.mc || '—') + '</td>' +
-        '<td>' + esc(x.name) + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td>' +
+        '<td>' + esc(x.name) + '<button type="button" class="ib" data-doc="' + esc(x._k) + '" title="Documents">📄</button>' + (x.dba ? '<div class="small">DBA: ' + esc(x.dba) + '</div>' : '') + '</td>' +
         '<td>' + esc(x.officer || '—') + '</td>' +
         '<td>' + bPhone(x) + '</td>' +
         '<td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a><button type="button" class="ib cp" data-copy="' + esc(x.email) + '" title="Copy email">⧉</button>' : '—') + '</td>' +
@@ -1108,6 +1133,110 @@ function tRender() {
       (hist ? '<details style="margin-top:10px"><summary class="small">History (' + x.hist.length + ')</summary>' + hist + '</details>' : '') + '</div>';
   }).join('');
 }
+
+/* ---------------- carrier documents ---------------- */
+var dCur = null, DI = [['agr','Dispatch Agreement (signed)'],['w9','W-9 (signed)'],['mc','MC authority letter'],['coi','Insurance certificate (COI)']];
+function dn(c) {
+  return { name: c.name || '', dba: c.dba || '', mc: c.mc || '', dot: c.dot || '', officer: c.officer || '', phone: c.phone || c.cellPhone || '', email: c.email || '',
+    addr: c.address || [c.city, c.state].filter(Boolean).join(', '), units: c.powerUnits || c.units || '', drivers: c.drivers || '', equip: c.equipment || '',
+    auth: c.authority || c.common || '', ins: c.ins ? c.ins + (c.insAmt ? ' $' + c.insAmt + 'K' : '') : '', safety: c.safety || '', crashes: c.crashes == null ? '' : c.crashes, added: c.addDate || '' };
+}
+function dOpen(c) { dCur = dn(c); $('dtitle').textContent = dCur.name + ' · MC ' + dCur.mc + ' · DOT ' + dCur.dot; dList(); $('dmo').style.display = 'flex'; }
+function docBulk(k) { var r = bulk.filter(function (x) { return x._k === k; })[0]; if (r) dOpen(r); }
+function docLead(i) { var l = getLeads()[i]; if (l) dOpen(l); }
+$('bres').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-doc]') : null; if (b) docBulk(b.getAttribute('data-doc')); });
+function dSt() { try { return JSON.parse(localStorage.getItem('docs_' + userKey()) || '{}'); } catch (e) { return {}; } }
+function dSet(k, f, v) { var a = dSt(), o = a[dCur.dot] = a[dCur.dot] || {}; o[k] = o[k] || {}; o[k][f] = v; try { localStorage.setItem('docs_' + userKey(), JSON.stringify(a)); } catch (e) {} }
+function dList() {
+  var s = dSt()[dCur.dot] || {};
+  $('dlist').innerHTML = DI.map(function (d) {
+    var v = s[d[0]] || {};
+    return '<div class="mrow"><b style="min-width:200px">' + d[1] + '</b><select onchange="dSet(\'' + d[0] + '\',\'s\',this.value)">' +
+      ['Pending', 'Requested', 'Received'].map(function (o) { return '<option' + (o === (v.s || 'Pending') ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
+      '</select><input type="file" style="max-width:190px" onchange="dUp(\'' + d[0] + '\',this)">' + (v.f ? '<span class="small">📎 ' + esc(v.f) + '</span>' : '') + '</div>';
+  }).join('');
+}
+function dUp(k, inp) {
+  var f = inp.files[0]; if (!f) return;
+  if (!sb || !session) { alert('Upload ke liye login zaroori hai.'); return; }
+  var p = session.user.id + '/' + dCur.dot + '/' + k + '-' + f.name.replace(/[^\w.\-]/g, '_');
+  sb.storage.from('carrier-docs').upload(p, f, { upsert: true }).then(function (r) {
+    if (r.error) { alert('Upload fail: ' + r.error.message + '. Supabase mein "carrier-docs" bucket banayein.'); return; }
+    dSet(k, 'f', f.name); dSet(k, 's', 'Received'); dList();
+  });
+}
+function dPrint(t, body) {
+  var w = window.open('', '_blank'); if (!w) { alert('Popup allow karein.'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(t) + '</title><style>body{font:14px/1.5 Arial,sans-serif;max-width:760px;margin:30px auto;padding:0 20px;color:#111}h1{font-size:22px;border-bottom:2px solid #0a1830;padding-bottom:6px}h2{font-size:15px;margin:16px 0 4px}table{width:100%;border-collapse:collapse}td{border:1px solid #bbb;padding:7px 9px;vertical-align:top}td:first-child{width:38%;background:#f3f5f9;font-weight:700}.sig{margin-top:40px;display:flex;gap:40px}.sig div{flex:1;border-top:1px solid #000;padding-top:4px}.n{font-size:12px;color:#555}</style></head><body>' + body + '</body></html>');
+  w.document.close(); setTimeout(function () { w.print(); }, 500);
+}
+function dTab(a) { return '<table>' + a.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (esc(r[1]) || '&nbsp;') + '</td></tr>'; }).join('') + '</table>'; }
+function dToday() { return new Date().toLocaleDateString('en-US'); }
+function dAgr() {
+  var c = dCur, co = esc($('dco').value), rp = esc($('drep').value), fee = esc($('dfee').value), law = esc($('dlaw').value) || '__________';
+  var cl = [['Services', 'Dispatcher will search for, negotiate and book freight loads for Carrier, and handle related dispatch paperwork and communication.'],
+    ['Fee', 'Carrier pays Dispatcher ' + fee + '% of the gross linehaul revenue of each load booked by Dispatcher, due within 7 days after Carrier is paid for that load.'],
+    ['Carrier responsibilities', 'Carrier keeps active operating authority and required insurance, operates safely and legally, and delivers loads on time.'],
+    ['Independent parties', 'Dispatcher is not a motor carrier or broker for these loads. Carrier remains an independent contractor and is responsible for its drivers, equipment and compliance.'],
+    ['Term', 'This Agreement starts on the date above. Either party may end it with 7 days written notice. Fees on loads already booked stay payable.'],
+    ['Confidentiality', 'Both parties keep rates, customers and business information confidential.'],
+    ['Liability', 'Dispatcher is not liable for cargo loss, damage, delay or accidents. Carrier carries its own insurance for these.'],
+    ['Governing law', 'This Agreement is governed by the laws of ' + law + '.']];
+  dPrint('Dispatch Agreement', '<h1>Dispatch Service Agreement</h1><p>Date: ' + dToday() + '</p><p>Between <b>' + co + '</b> ("Dispatcher") and <b>' + esc(c.name) + '</b> ("Carrier"), MC ' + esc(c.mc) + ', USDOT ' + esc(c.dot) + ', ' + esc(c.addr) + '.</p>' +
+    cl.map(function (x, i) { return '<h2>' + (i + 1) + '. ' + x[0] + '</h2><div>' + x[1] + '</div>'; }).join('') +
+    '<div class="sig"><div>Dispatcher: ' + co + '<br>' + rp + '<br>Date: ________</div><div>Carrier: ' + esc(c.name) + '<br>Name: ____________<br>Signature / Date: ________</div></div>');
+}
+function dW9() {
+  var c = dCur;
+  dPrint('W-9 information sheet', '<h1>W-9 Information Sheet</h1><p class="n">Pre-filled from public FMCSA data. The carrier must check it, add the tax ID and sign. Use the official IRS Form W-9 (irs.gov/pub/irs-pdf/fw9.pdf) for the final signed copy.</p>' +
+    dTab([['Name (as on tax return)', c.name], ['Business / DBA name', c.dba], ['Federal tax classification', ''], ['Address', c.addr], ['MC / USDOT', c.mc + ' / ' + c.dot], ['Tax ID (EIN or SSN)', ''], ['Signature', ''], ['Date', '']]));
+}
+function dW9msg() {
+  var c = dCur, m = 'Hi ' + (c.officer || '') + ', this is ' + $('drep').value + ' from ' + $('dco').value + '. To onboard ' + c.name + ' please fill in and sign a W-9 and send it back here: https://www.irs.gov/pub/irs-pdf/fw9.pdf Thank you!';
+  var d = tPhoneDigits(c.phone);
+  if (d) window.open('https://wa.me/' + d + '?text=' + encodeURIComponent(m), '_blank');
+  else if (navigator.clipboard) navigator.clipboard.writeText(m).then(function () { alert('No phone. Message copied.'); });
+  dSet('w9', 's', 'Requested'); dList();
+}
+function dLI() { window.open('https://li-public.fmcsa.dot.gov/LIVIEW/pkg_carrquery.prc_carrlist?n_dotno=' + encodeURIComponent(dCur.dot), '_blank'); }
+function dMC() {
+  var c = dCur;
+  dPrint('MC authority summary', '<h1>MC Authority Summary</h1><p class="n">Summary of public FMCSA data on ' + dToday() + '. This is NOT the official FMCSA authority letter. Get that from the carrier or the FMCSA Licensing &amp; Insurance site.</p>' +
+    dTab([['Carrier', c.name], ['MC', c.mc], ['USDOT', c.dot], ['Authority status', c.auth], ['Insurance', c.ins], ['Address', c.addr]]) +
+    '<p class="n">FMCSA snapshot: https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&amp;query_type=queryCarrierSnapshot&amp;query_param=USDOT&amp;query_string=' + esc(c.dot) + '</p>');
+}
+function dProf() {
+  var c = dCur;
+  dPrint('Carrier profile', '<h1>Carrier Profile · ' + esc(c.name) + '</h1><p class="n">Generated ' + dToday() + ' from public FMCSA data.</p>' +
+    dTab([['Company', c.name], ['DBA', c.dba], ['MC / USDOT', c.mc + ' / ' + c.dot], ['Officer', c.officer], ['Phone', c.phone], ['Email', c.email], ['Address', c.addr], ['Power units', c.units], ['Drivers', c.drivers], ['Equipment', c.equip], ['Authority', c.auth], ['Insurance', c.ins], ['Safety rating', c.safety], ['Crashes', c.crashes], ['In census since', c.added]]));
+}
+
+/* ---------------- documents page (search any MC / DOT) ---------------- */
+var dFound = [];
+function dAdapt(c) {
+  var b = c.insurance && c.insurance.bipdOnFile > 0;
+  return { name: c.name, dba: c.legalName && c.legalName !== c.name ? c.legalName : '', mc: (c.mc || []).join(' '), dot: c.dot, officer: c.officer1, phone: c.phone, cellPhone: c.cellPhone, email: c.email, address: c.address,
+    powerUnits: c.powerUnits, drivers: c.drivers, authority: c.common, safety: c.safetyRating, crashes: c.crashTotal, ins: b ? 'On File' : 'None', insAmt: b ? c.insurance.bipdOnFile : 0 };
+}
+function dPick(i, fn) { dCur = dn(dAdapt(dFound[i])); window[fn](); }
+$('df').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var q = $('dq').value.replace(/\D/g, '');
+  $('dmsg').className = ''; $('dmsg').textContent = 'Searching…'; $('dfound').innerHTML = '';
+  apiFetch('/api/carrier?type=' + $('dtype').value + '&q=' + encodeURIComponent(q))
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (x) {
+      if (!x.ok) { $('dmsg').className = 'err'; $('dmsg').textContent = x.d.error || 'Error'; return; }
+      dFound = x.d.results || [];
+      $('dmsg').textContent = dFound.length ? dFound.length + ' result(s)' : 'No carrier found.';
+      $('dfound').innerHTML = dFound.map(function (c, i) {
+        var B = function (t, f, cls) { return '<button type="button"' + (cls ? ' class="' + cls + '"' : '') + ' onclick="dPick(' + i + ',\'' + f + '\')">' + t + '</button>'; };
+        return '<div class="tc"><div class="row"><div><b>' + esc(c.name) + '</b><div class="small">MC ' + esc((c.mc || []).join(', ') || '—') + ' · DOT ' + esc(c.dot) + ' · Authority: ' + esc(c.common || '—') + '</div><div class="small">' + esc(c.address || '') + '</div></div></div>' +
+          '<div class="acts">' + B('🔗 FMCSA authority page', 'dLI', 'go') + B('📄 W-9 form', 'dW9', 'go') + B('W-9 request (WhatsApp)', 'dW9msg') + B('MC authority summary', 'dMC') + B('Dispatch Agreement', 'dAgr') + B('Profile sheet', 'dProf') + '</div></div>';
+      }).join('');
+    })
+    .catch(function () { $('dmsg').className = 'err'; $('dmsg').textContent = 'Could not reach the server.'; });
+});
 
 bRender();
 initAuth();
