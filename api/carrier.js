@@ -27,6 +27,24 @@ async function census(dot) {
   }
 }
 
+// Census row by MC number (docket1/2/3), tolerant of leading zeros
+async function censusByMc(digits) {
+  try {
+    const n = String(Number(digits));
+    const vals = [n, n.padStart(6, '0'), n.padStart(7, '0'), n.padStart(8, '0')]
+      .map((v) => "'" + v + "'")
+      .join(',');
+    const where = 'docket1 in (' + vals + ') OR docket2 in (' + vals + ') OR docket3 in (' + vals + ')';
+    const url = CENSUS + '?$limit=1&$where=' + encodeURIComponent(where);
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 const AUTH = { A: 'Active', I: 'Inactive', N: 'None' };
 const authText = (v) => AUTH[v] || (v ? String(v) : 'Unknown');
 const kNum = (v) => Number(String(v == null ? 0 : v).replace(/[^0-9.]/g, '')) || 0;
@@ -35,6 +53,8 @@ const fmtPhone = (v) => {
   const d = String(v || '').replace(/\D/g, '');
   return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(v || '');
 };
+
+const OPER = { A: 'Interstate', B: 'Intrastate (Hazmat)', C: 'Intrastate (Non-Hazmat)' };
 
 function shape(c, mcList, cs) {
   const bipd = kNum(c.bipdInsuranceOnFile);
@@ -62,6 +82,9 @@ function shape(c, mcList, cs) {
     drivers: kNum(c.totalDrivers),
     powerUnits: kNum(c.totalPowerUnits),
     operation: (c.carrierOperation && c.carrierOperation.carrierOperationDesc) || '',
+    operationClass: cs.classdef || '',
+    businessOrg: cs.business_org_desc || cs.business_org || '',
+    mileage: cs.mcs150_mileage || '',
     safetyRating: c.safetyRating || '',
     crashTotal: kNum(c.crashTotal),
     address: [c.phyStreet, c.phyCity, c.phyState, c.phyZipcode].filter(Boolean).join(', '),
@@ -76,6 +99,52 @@ function shape(c, mcList, cs) {
     mcs150Date: day(cs.mcs150_date),
     censusAddDate: day(cs.add_date),
     censusFound: !!cs.dot_number
+  };
+}
+
+// Build the same result shape from a Census row alone (new carriers not yet in QCMobile)
+function shapeFromCensus(cs) {
+  const mcs = [1, 2, 3]
+    .filter((n) => cs['docket' + n])
+    .map((n) => (cs['docket' + n + 'prefix'] || 'MC') + cs['docket' + n]);
+  // cargo flags such as crgo_genfreight = "X"
+  const cargo = Object.keys(cs)
+    .filter((k) => /^crgo_/.test(k) && k !== 'crgo_cargoothr_desc' && String(cs[k]).trim())
+    .map((k) => k.replace(/^crgo_/, ''));
+  const active = String(cs.status_code || '').toUpperCase() === 'A';
+  return {
+    dot: cs.dot_number,
+    mc: mcs,
+    name: cs.dba_name || cs.legal_name,
+    legalName: cs.legal_name,
+    dba: cs.dba_name || '',
+    authorized: active,
+    statusCode: cs.status_code,
+    common: active ? 'Active' : 'Unknown',
+    contract: 'Unknown',
+    broker: 'Unknown',
+    insurance: { bipdOnFile: 0, bipdRequired: 0, cargoOnFile: 0, bondOnFile: 0 },
+    drivers: kNum(cs.total_drivers),
+    powerUnits: kNum(cs.power_units),
+    operation: OPER[String(cs.carrier_operation || '').toUpperCase()] || cs.carrier_operation || '',
+    operationClass: cs.classdef || '',
+    businessOrg: cs.business_org_desc || cs.business_org || '',
+    mileage: cs.mcs150_mileage || '',
+    cargo: cargo,
+    safetyRating: '',
+    crashTotal: 0,
+    address: [cs.phy_street, cs.phy_city, cs.phy_state, cs.phy_zip].filter(Boolean).join(', '),
+    oos: false,
+    oosDate: '',
+    email: (cs.email_address || '').toLowerCase(),
+    phone: fmtPhone(cs.phone),
+    cellPhone: fmtPhone(cs.cell_phone),
+    officer1: cs.company_officer_1 || '',
+    officer2: cs.company_officer_2 || '',
+    mcs150Date: day(cs.mcs150_date),
+    censusAddDate: day(cs.add_date),
+    censusFound: true,
+    fromCensusOnly: true
   };
 }
 
@@ -98,6 +167,17 @@ module.exports = async (req, res) => {
       data = await get('/carriers/docket-number/' + digits, key);
     } else {
       data = await get('/carriers/name/' + encodeURIComponent(q), key);
+    }
+
+    // QCMobile has nothing (new carrier) -> fall back to the Census file
+    if (!data || !data.content || (Array.isArray(data.content) && !data.content.length)) {
+      let cs = null;
+      if (type === 'mc') cs = await censusByMc(digits);
+      else if (type === 'dot') cs = await census(digits);
+      if (cs) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(200).json({ results: [shapeFromCensus(cs)] });
+      }
     }
 
     const content = data && data.content;
