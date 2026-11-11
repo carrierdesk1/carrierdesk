@@ -666,7 +666,7 @@ function bCounts(list) {
 }
 function bStatus() {
   var t = bulk.length.toLocaleString() + ' carrier(s) found · scanned ' + bScanned.toLocaleString() + (bTotal ? ' of ' + bTotal.toLocaleString() : '') + ' census records';
-  if (bLoading) t += ' · loading…';
+  if (bLoading) t += ' · loading…' + (bRetryMsg ? ' ' + bRetryMsg : '');
   else if (bQueue.length) t += ' · paused, press "Load more" to continue';
   else if (bDone) t += ' · all loaded';
   var left = bAuthQ.length + bAuthActive * AUTH_CHUNK;
@@ -809,18 +809,28 @@ function goPage(n) { bPage = n; bRender(); var el = $('bres'); if (el && el.scro
 
 function bFinish() { bLoading = false; bRender(); }
 function bUrl(off) { return bBase + '&offset=' + off + (bPlain ? '&plain=1' : ''); }
+var bRetryMsg = '';
 function bGet(off, run, tries) {
   return apiFetch(bUrl(off))
-    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-    .then(function (x) { if (!x.ok) throw new Error(x.d.error || 'Error'); return x.d; })
+    .then(function (r) {
+      return r.text().then(function (txt) {
+        var d = null;
+        try { d = JSON.parse(txt); } catch (e) { d = { error: 'Server timed out (status ' + r.status + ')' }; }
+        return { ok: r.ok, d: d };
+      });
+    })
+    .then(function (x) { if (!x.ok) throw new Error(x.d.error || 'Error'); bRetryMsg = ''; return x.d; })
     .catch(function (e) {
-    if (tries < 4 && run === bRun && !bStop) {
-      var busy = /429|too many|busy|slow|timeout/i.test(e.message || '');
-      return new Promise(function (ok) { setTimeout(ok, busy ? 3000 * (tries + 1) : 400); })
-        .then(function () { return bGet(off, run, tries + 1); });
-    }
-    throw e;
-  });
+      if (tries < 3 && run === bRun && !bStop) {
+        var busy = /429|too many|busy|slow|timeout|timed out/i.test(e.message || '');
+        var secs = busy ? 4 * (tries + 1) : 1;
+        bRetryMsg = busy ? 'Census server is busy, retrying in ' + secs + 's (attempt ' + (tries + 2) + ' of 4)…' : '';
+        bStatus();
+        return new Promise(function (ok) { setTimeout(ok, secs * 1000); }).then(function () { return bGet(off, run, tries + 1); });
+      }
+      bRetryMsg = '';
+      throw e;
+    });
 }
 function bAddRows(d) {
   (d.rows || []).forEach(function (r) {
