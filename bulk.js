@@ -30,7 +30,12 @@ const CARGO = {
 let keyCache = null;
 
 // Optional: a free Socrata app token (set SOCRATA_APP_TOKEN in Vercel) avoids throttling.
-const tokenHeaders = () => (process.env.SOCRATA_APP_TOKEN ? { 'X-App-Token': process.env.SOCRATA_APP_TOKEN } : {});
+let tokenBad = false; // set when Socrata rejects the token, then we continue without it
+const cleanToken = () => String(process.env.SOCRATA_APP_TOKEN || '').replace(/["'\s]/g, '');
+const tokenHeaders = () => {
+  const t = cleanToken();
+  return t && !tokenBad ? { 'X-App-Token': t } : {};
+};
 
 async function soda(params) {
   const qs = Object.keys(params)
@@ -39,6 +44,7 @@ async function soda(params) {
   let r;
   for (let i = 0; i < 4; i++) {
     r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000), headers: tokenHeaders() });
+    if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; } // bad token: retry without it
     if (r.status !== 429 && r.status < 500) break;
     await new Promise((ok) => setTimeout(ok, 600 * (i + 1) + Math.random() * 400)); // throttled: wait, then retry
   }
@@ -130,7 +136,11 @@ async function sodaAt(base, params, ms) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
-  const r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+  let r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+  if (r.status === 403 && !tokenBad && cleanToken()) {
+    tokenBad = true;
+    r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+  }
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     throw new Error('Motus API status ' + r.status + (t ? ': ' + t.slice(0, 150) : ''));
