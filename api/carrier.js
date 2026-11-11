@@ -2,9 +2,16 @@ const BASE = 'https://mobile.fmcsa.dot.gov/qc/services';
 // FMCSA Company Census File (free, no key): data.transportation.gov dataset az4n-8mr2
 const CENSUS = 'https://data.transportation.gov/resource/az4n-8mr2.json';
 
-async function get(path, key) {
+async function get(path, key, ms) {
   const sep = path.includes('?') ? '&' : '?';
-  const r = await fetch(BASE + path + sep + 'webKey=' + encodeURIComponent(key));
+  let r;
+  try {
+    r = await fetch(BASE + path + sep + 'webKey=' + encodeURIComponent(key), { signal: AbortSignal.timeout(ms || 4500) });
+  } catch (e) {
+    const te = new Error('FMCSA server is slow right now (timeout). Please press Search again.');
+    te.status = 504;
+    throw te;
+  }
   if (r.status === 404) return null;
   if (!r.ok) {
     const e = new Error('FMCSA returned status ' + r.status);
@@ -296,16 +303,20 @@ module.exports = async (req, res) => {
       return res.status(200).json(hit);
     }
 
-    let data;
+    let data = null;
+    let qcDown = null; // set when QCMobile itself failed (504 / timeout)
     const digits = q.replace(/\D/g, '');
-    if (type === 'dot') {
-      if (!digits) return res.status(400).json({ error: 'DOT must be a number' });
-      data = await get('/carriers/' + digits, key);
-    } else if (type === 'mc') {
-      if (!digits) return res.status(400).json({ error: 'MC must be a number' });
-      data = await get('/carriers/docket-number/' + digits, key);
-    } else {
-      data = await get('/carriers/name/' + encodeURIComponent(q), key);
+    if ((type === 'dot' || type === 'mc') && !digits) {
+      return res.status(400).json({ error: (type === 'dot' ? 'DOT' : 'MC') + ' must be a number' });
+    }
+    try {
+      if (type === 'dot') data = await get('/carriers/' + digits, key);
+      else if (type === 'mc') data = await get('/carriers/docket-number/' + digits, key);
+      else data = await get('/carriers/name/' + encodeURIComponent(q), key);
+    } catch (e) {
+      if (type !== 'dot' && type !== 'mc') throw e; // name search has no Census fallback
+      qcDown = e; // MC/DOT: continue with the Census file below
+      data = null;
     }
 
     // QCMobile has nothing (new carrier) -> fall back to the Census file
@@ -328,6 +339,8 @@ module.exports = async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
         return res.status(200).json(payload);
       }
+      // QCMobile was down AND Census has no row: do not say "not found", say the server is busy
+      if (qcDown) throw qcDown;
     }
 
     const content = data && data.content;
