@@ -97,10 +97,11 @@ async function sodaAt(base, params, ms, tries, until) {
 // Census row for one DOT number (used for the contact details on QCMobile results). Optional.
 async function census(dot) {
   try {
-    const rows = await sodaAt(CENSUS, { $limit: 1, dot_number: String(dot) }, 6000, 2, Date.now() + 6500);
-    return Array.isArray(rows) && rows.length ? rows[0] : null;
+    const rows = await sodaAt(CENSUS, { $limit: 1, dot_number: String(dot) }, 7000, 3, Date.now() + 7500);
+    if (Array.isArray(rows) && rows.length) return { row: rows[0], err: '' };
+    return { row: null, err: 'No FMCSA census record for DOT ' + dot };
   } catch (e) {
-    return null;
+    return { row: null, err: e.message || 'Census lookup failed' };
   }
 }
 
@@ -190,9 +191,19 @@ const fmtPhone = (v) => {
   return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(v || '');
 };
 
+const CARGO_LBL = { crgo_genfreight: 'General Freight', crgo_household: 'Household Goods', crgo_metalsheet: 'Metal Sheets/Coils', crgo_motoveh: 'Motor Vehicles', crgo_drivetow: 'Drive/Tow Away', crgo_logpole: 'Logs/Poles/Lumber', crgo_bldgmat: 'Building Materials', crgo_mobilehome: 'Mobile Homes', crgo_machlrg: 'Machinery/Large Objects', crgo_produce: 'Fresh Produce', crgo_liqgas: 'Liquids/Gases', crgo_intermodal: 'Intermodal', crgo_passengers: 'Passengers', crgo_oilfield: 'Oilfield Equipment', crgo_livestock: 'Livestock', crgo_grainfeed: 'Grain/Feed', crgo_coalcoke: 'Coal/Coke', crgo_meat: 'Meat', crgo_garbage: 'Garbage/Refuse', crgo_usmail: 'US Mail', crgo_chem: 'Chemicals', crgo_drybulk: 'Commodities Dry Bulk', crgo_coldfood: 'Refrigerated Food', crgo_beverages: 'Beverages', crgo_paperprod: 'Paper Products', crgo_utility: 'Utilities', crgo_farmsupp: 'Farm Supplies', crgo_construct: 'Construction', crgo_waterwell: 'Water Well', crgo_cargoothr: 'Other' };
+const cargoList = (cs) =>
+  Object.keys(cs || {})
+    .filter((k) => /^crgo_/.test(k) && k !== 'crgo_cargoothr_desc' && String(cs[k]).trim())
+    .map((k) => CARGO_LBL[k] || k.replace(/^crgo_/, ''));
+const mailingOf = (cs) => {
+  const g = (...ks) => { for (const k of ks) if (cs && cs[k]) return String(cs[k]); return ''; };
+  return [g('mailing_street', 'mail_street', 'mailing_address'), g('mailing_city', 'mail_city'), g('mailing_state', 'mail_state'), g('mailing_zip', 'mail_zip')].filter(Boolean).join(', ');
+};
+
 const OPER = { A: 'Interstate', B: 'Intrastate (Hazmat)', C: 'Intrastate (Non-Hazmat)' };
 
-function shape(c, mcList, cs) {
+function shape(c, mcList, cs, note) {
   const bipd = kNum(c.bipdInsuranceOnFile);
   const cargo = kNum(c.cargoInsuranceOnFile);
   const bond = kNum(c.bondInsuranceOnFile);
@@ -223,12 +234,15 @@ function shape(c, mcList, cs) {
     mileage: cs.mcs150_mileage || '',
     safetyRating: c.safetyRating || '',
     crashTotal: kNum(c.crashTotal),
+    cargo: cargoList(cs),
+    mailing: mailingOf(cs),
+    censusNote: cs.dot_number ? '' : note || '',
     address: [c.phyStreet, c.phyCity, c.phyState, c.phyZipcode].filter(Boolean).join(', '),
     oos: !!c.oosDate,
     oosDate: c.oosDate || '',
     // From the Census file (may be empty if FMCSA has none on file)
     email: (cs.email_address || '').toLowerCase(),
-    phone: fmtPhone(cs.phone),
+    phone: fmtPhone(cs.phone || cs.telephone),
     cellPhone: fmtPhone(cs.cell_phone),
     officer1: cs.company_officer_1 || '',
     officer2: cs.company_officer_2 || '',
@@ -243,10 +257,7 @@ function shapeFromCensus(cs) {
   const mcs = [1, 2, 3]
     .filter((n) => cs['docket' + n])
     .map((n) => (cs['docket' + n + 'prefix'] || 'MC') + cs['docket' + n]);
-  // cargo flags such as crgo_genfreight = "X"
-  const cargo = Object.keys(cs)
-    .filter((k) => /^crgo_/.test(k) && k !== 'crgo_cargoothr_desc' && String(cs[k]).trim())
-    .map((k) => k.replace(/^crgo_/, ''));
+  const cargo = cargoList(cs);
   const active = String(cs.status_code || '').toUpperCase() === 'A';
   return {
     dot: cs.dot_number,
@@ -267,13 +278,14 @@ function shapeFromCensus(cs) {
     businessOrg: cs.business_org_desc || cs.business_org || '',
     mileage: cs.mcs150_mileage || '',
     cargo: cargo,
+    mailing: mailingOf(cs),
     safetyRating: '',
     crashTotal: 0,
     address: [cs.phy_street, cs.phy_city, cs.phy_state, cs.phy_zip].filter(Boolean).join(', '),
     oos: false,
     oosDate: '',
     email: (cs.email_address || '').toLowerCase(),
-    phone: fmtPhone(cs.phone),
+    phone: fmtPhone(cs.phone || cs.telephone),
     cellPhone: fmtPhone(cs.cell_phone),
     officer1: cs.company_officer_1 || '',
     officer2: cs.company_officer_2 || '',
@@ -321,7 +333,7 @@ module.exports = async (req, res) => {
 
   try {
     const ck = type + '|' + q.toLowerCase();
-    const hit = cacheGet(ck);
+    const hit = String(req.query.fresh || '') === '1' ? null : cacheGet(ck);
     if (hit) {
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json(hit);
@@ -375,7 +387,7 @@ module.exports = async (req, res) => {
       .slice(0, 10);
 
     const out = await Promise.all(
-      carriers.map(async (c) => {
+      carriers.map(async (c, idx) => {
         const mcPromise = (async () => {
           try {
             const d = await get('/carriers/' + c.dotNumber + '/docket-numbers', key);
@@ -388,13 +400,15 @@ module.exports = async (req, res) => {
             return []; /* MC list is optional */
           }
         })();
-        const [mcs, cs] = await Promise.all([mcPromise, census(c.dotNumber)]);
-        return shape(c, mcs, cs);
+        // contact data only for the first 4 results (avoids Census rate limits); search by DOT for the rest
+        const crP = idx < 4 ? census(c.dotNumber) : Promise.resolve({ row: null, err: 'Contact data loads for the first results only. Press Retry or search by DOT.' });
+        const [mcs, cr] = await Promise.all([mcPromise, crP]);
+        return shape(c, mcs, cr.row, cr.err);
       })
     );
 
     const payload = { results: out };
-    if (out.length) cacheSet(ck, payload);
+    if (out.length && out.every((x) => x.censusFound)) cacheSet(ck, payload);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json(payload);
   } catch (e) {
