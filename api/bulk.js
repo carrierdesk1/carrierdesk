@@ -37,37 +37,68 @@ const tokenHeaders = () => {
   return t && !tokenBad ? { 'X-App-Token': t } : {};
 };
 
-async function soda(params, ms, tries) {
-  const qs = Object.keys(params)
-    .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
-    .join('&');
-  const maxTries = tries || 4;
+const wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const qsOf = (params) => Object.keys(params)
+  .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
+  .join('&');
+
+// At most 2 Socrata requests at the same time per function instance (keeps us under the rate limit)
+let gateActive = 0;
+const gateQ = [];
+function gate(fn) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      gateActive++;
+      fn().then(resolve, reject).finally(() => {
+        gateActive--;
+        const nx = gateQ.shift();
+        if (nx) nx();
+      });
+    };
+    if (gateActive < 2) run(); else gateQ.push(run);
+  });
+}
+
+// After a 429 every request in this instance waits (shared cool-down)
+let coolUntil = 0;
+async function socrata(url, ms, tries, label) {
+  const max = tries || 4;
   let r;
-  for (let i = 0; i < maxTries; i++) {
+  for (let i = 0; i < max; i++) {
+    const cool = coolUntil - Date.now();
+    if (cool > 0) await wait(Math.min(cool, 5000));
     try {
-      r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(ms || 20000), headers: tokenHeaders() });
+      r = await fetch(url, { signal: AbortSignal.timeout(ms || 20000), headers: tokenHeaders() });
     } catch (e) {
       // Socrata is slow on the first try (cold cache): the retry is usually much faster
-      if (i < maxTries - 1) { await new Promise((ok) => setTimeout(ok, 300)); continue; }
+      if (i < max - 1) { await wait(300); continue; }
       throw new Error('Census server is slow right now (timeout). Please press Fetch again.');
     }
     if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; } // bad token: retry without it
     if (r.status !== 429 && r.status < 500) break;
-    await new Promise((ok) => setTimeout(ok, 600 * (i + 1) + Math.random() * 400)); // throttled: wait, then retry
+    let pause = 600 * (i + 1) + Math.random() * 400;
+    if (r.status === 429) {
+      const ra = Number(r.headers.get('retry-after'));
+      pause = Math.min(ra > 0 ? ra * 1000 : 1500 * (i + 1) + Math.random() * 500, 5000);
+      coolUntil = Date.now() + pause;
+    }
+    if (i < max - 1) await wait(pause);
   }
   if (!r.ok) {
     const t = await r.text().catch(() => '');
-    throw new Error('Census API status ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
+    throw new Error((label || 'Census') + ' API status ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
   }
   return r.json();
 }
+
+const soda = (params, ms, tries) => gate(() => socrata(CENSUS + '?' + qsOf(params), ms, tries, 'Census'));
 
 // SODA JSON leaves out null fields, so read the full column list from the dataset metadata.
 async function getKeys() {
   if (keyCache && keyCache.length) return keyCache;
   let keys = [];
   try {
-    const r = await fetch(META, { signal: AbortSignal.timeout(6000) });
+    const r = await fetch(META, { signal: AbortSignal.timeout(6000), headers: tokenHeaders() });
     if (r.ok) {
       const m = await r.json();
       keys = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
@@ -138,27 +169,14 @@ async function requireUser(req, res) {
 const MOTUS = 'https://data.transportation.gov/resource/inys-ebih.json';
 const MOTUS_META = 'https://data.transportation.gov/api/views/inys-ebih.json';
 let motusKeyCache = null;
+const authCache = {}; // dot -> { t, rows }
 
-async function sodaAt(base, params, ms) {
-  const qs = Object.keys(params)
-    .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
-    .join('&');
-  let r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
-  if (r.status === 403 && !tokenBad && cleanToken()) {
-    tokenBad = true;
-    r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
-  }
-  if (!r.ok) {
-    const t = await r.text().catch(() => '');
-    throw new Error('Motus API status ' + r.status + (t ? ': ' + t.slice(0, 150) : ''));
-  }
-  return r.json();
-}
+const sodaAt = (base, params, ms, tries) => gate(() => socrata(base + '?' + qsOf(params), ms, tries || 3, 'Motus'));
 
 async function getMotusKeys() {
   if (motusKeyCache && motusKeyCache.length) return motusKeyCache;
   try {
-    const r = await fetch(MOTUS_META, { signal: AbortSignal.timeout(5000) });
+    const r = await fetch(MOTUS_META, { signal: AbortSignal.timeout(5000), headers: tokenHeaders() });
     if (r.ok) {
       const m = await r.json();
       const k = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
@@ -175,7 +193,7 @@ let insKeyCache = null;
 async function getInsKeys() {
   if (insKeyCache && insKeyCache.length) return insKeyCache;
   try {
-    const r = await fetch(INS_META, { signal: AbortSignal.timeout(5000) });
+    const r = await fetch(INS_META, { signal: AbortSignal.timeout(5000), headers: tokenHeaders() });
     if (r.ok) {
       const m = await r.json();
       const k = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
@@ -238,19 +256,32 @@ async function loadAuthority(dots, warnings) {
   }
   const select = [dotCol, 'docket_number', out.typeCol, out.statusCol].filter((k) => k && keys.indexOf(k) !== -1).join(',');
   const uniq = Array.from(new Set(dots.map(stripZeros).filter(Boolean)));
+  const now = Date.now();
+  const need = [];
+  uniq.forEach((d) => {
+    const hit = authCache[d];
+    if (hit && now - hit.t < 10 * 60 * 1000) out.map[d] = hit.rows;
+    else need.push(d);
+  });
   const groups = [];
-  for (let i = 0; i < uniq.length; i += 120) groups.push(uniq.slice(i, i + 120));
+  for (let i = 0; i < need.length; i += 120) groups.push(need.slice(i, i + 120));
   try {
     const results = await Promise.all(groups.map((g) => {
       const vals = [];
       g.forEach((d) => { vals.push("'" + d + "'"); vals.push("'" + d.padStart(8, '0') + "'"); });
       return sodaAt(MOTUS, { $select: select, $where: dotCol + ' in (' + vals.join(',') + ')', $limit: 5000 }, 8000);
     }));
+    const fresh = {};
     results.forEach((rows) => rows.forEach((r) => {
       const k = stripZeros(r[dotCol]);
       if (!k) return;
-      (out.map[k] = out.map[k] || []).push(r);
+      (fresh[k] = fresh[k] || []).push(r);
     }));
+    Object.keys(fresh).forEach((k) => {
+      out.map[k] = fresh[k];
+      if (Object.keys(authCache).length > 5000) { for (const x in authCache) delete authCache[x]; }
+      authCache[k] = { t: now, rows: fresh[k] };
+    });
     out.ok = Object.keys(out.map).length > 0;
     if (!out.ok) warnings.push('No authority rows found in Motus Carrier dataset for these carriers, authority not shown.');
   } catch (e) {
