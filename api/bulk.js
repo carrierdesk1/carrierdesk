@@ -62,29 +62,37 @@ function gate(fn) {
 // After a 429 every request in this instance waits (shared cool-down)
 let coolUntil = 0;
 async function socrata(url, ms, tries, label) {
-  const max = tries || 4;
+  const max = tries || 6;
+  const deadline = Date.now() + 48000; // Vercel maxDuration is 60s, stop retrying before that
   let r;
   for (let i = 0; i < max; i++) {
     const cool = coolUntil - Date.now();
-    if (cool > 0) await wait(Math.min(cool, 5000));
+    if (cool > 0) await wait(Math.min(cool, 8000));
     try {
       r = await fetch(url, { signal: AbortSignal.timeout(ms || 20000), headers: tokenHeaders() });
     } catch (e) {
       // Socrata is slow on the first try (cold cache): the retry is usually much faster
-      if (i < max - 1) { await wait(300); continue; }
+      if (i < max - 1 && Date.now() < deadline) { await wait(300); continue; }
       throw new Error('Census server is slow right now (timeout). Please press Fetch again.');
     }
     if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; } // bad token: retry without it
     if (r.status !== 429 && r.status < 500) break;
     let pause = 600 * (i + 1) + Math.random() * 400;
     if (r.status === 429) {
+      // exponential back-off: ~2s, 4s, 8s, 8s ... (or whatever Socrata asks for in Retry-After)
       const ra = Number(r.headers.get('retry-after'));
-      pause = Math.min(ra > 0 ? ra * 1000 : 1500 * (i + 1) + Math.random() * 500, 5000);
+      pause = Math.min(ra > 0 ? ra * 1000 : 2000 * Math.pow(2, i) + Math.random() * 700, 8000);
       coolUntil = Date.now() + pause;
     }
-    if (i < max - 1) await wait(pause);
+    if (i < max - 1) {
+      if (Date.now() + pause > deadline) break;
+      await wait(pause);
+    }
   }
   if (!r.ok) {
+    if (r.status === 429) {
+      throw new Error('Census server is busy (429 too many requests). Please wait about 30 seconds and press Fetch again.' + (cleanToken() ? '' : ' Tip: add SOCRATA_APP_TOKEN in Vercel to avoid this.'));
+    }
     const t = await r.text().catch(() => '');
     throw new Error((label || 'Census') + ' API status ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
   }
