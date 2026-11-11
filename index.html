@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CarrierDesk</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--bg:#eef2f8;--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--navy:#0a1830;--navy2:#0f2a57;--acc:#1a5fe0;--amb:#f59e0b;--ok:#16a34a;--bad:#dc2626;--head:#0b1424}
 *{box-sizing:border-box}
@@ -334,7 +335,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
 <label class="fl">Representative</label><input type="text" id="drep" value="Jax Carter">
 <label class="fl">Dispatch fee % of gross</label><input type="text" id="dfee" value="8">
 <label class="fl">Governing law (state)</label><input type="text" id="dlaw" placeholder="e.g. Texas">
-<div class="mrow"><button type="button" class="go" onclick="dAgr()">Dispatch Agreement</button><button type="button" onclick="dW9()">W-9 sheet (pre-filled)</button><button type="button" onclick="dW9msg()">W-9 request (WhatsApp)</button><button type="button" onclick="dMC()">MC authority summary</button><button type="button" onclick="dLI()">FMCSA authority page</button><button type="button" onclick="dProf()">Carrier profile sheet</button></div>
+<div class="mrow"><button type="button" class="go" onclick="dAgr()">Dispatch Agreement</button><button type="button" onclick="dW9()">⬇ W-9 PDF</button><button type="button" onclick="dW9msg()">W-9 request (WhatsApp)</button><button type="button" onclick="dMC()">⬇ MC letter PDF</button><button type="button" onclick="dLI()">FMCSA authority page</button><button type="button" onclick="dProf()">Carrier profile sheet</button></div>
 <h3 style="margin-top:18px">Checklist and uploads</h3><div id="dlist"></div>
 <div class="mrow"><button type="button" id="dclose" style="margin-left:auto" onclick="$('dmo').style.display='none'">Close</button></div>
 </div></div>
@@ -1186,10 +1187,29 @@ function dAgr() {
     cl.map(function (x, i) { return '<h2>' + (i + 1) + '. ' + x[0] + '</h2><div>' + x[1] + '</div>'; }).join('') +
     '<div class="sig"><div>Dispatcher: ' + co + '<br>' + rp + '<br>Date: ________</div><div>Carrier: ' + esc(c.name) + '<br>Name: ____________<br>Signature / Date: ________</div></div>');
 }
+function dPdf(file, title, note, rows, extra) {
+  if (!window.jspdf) { alert('PDF library did not load. Refresh and try again.'); return; }
+  var D = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' }), y = 60;
+  D.setFontSize(18); D.text(title, 50, y); y += 10; D.setLineWidth(1.5); D.line(50, y, 562, y); y += 22;
+  D.setFontSize(10); D.setTextColor(90);
+  D.splitTextToSize(note, 512).forEach(function (l) { D.text(l, 50, y); y += 13; });
+  D.setTextColor(0); y += 8; D.setFontSize(11); D.setLineWidth(0.5);
+  rows.forEach(function (r) {
+    var v = D.splitTextToSize(String(r[1] == null ? '' : r[1]), 300), h = Math.max(26, v.length * 14 + 12);
+    D.setFillColor(243, 245, 249); D.rect(50, y, 190, h, 'FD'); D.rect(240, y, 322, h);
+    D.setFont(undefined, 'bold'); D.text(r[0], 56, y + 17); D.setFont(undefined, 'normal');
+    v.forEach(function (l, i) { D.text(l, 246, y + 17 + i * 14); });
+    y += h;
+  });
+  y += 18; D.setFontSize(10);
+  (extra || []).forEach(function (t) { D.splitTextToSize(t, 512).forEach(function (l) { D.text(l, 50, y); y += 13; }); y += 6; });
+  D.save(file);
+}
 function dW9() {
   var c = dCur;
-  dPrint('W-9 information sheet', '<h1>W-9 Information Sheet</h1><p class="n">Pre-filled from public FMCSA data. The carrier must check it, add the tax ID and sign. Use the official IRS Form W-9 (irs.gov/pub/irs-pdf/fw9.pdf) for the final signed copy.</p>' +
-    dTab([['Name (as on tax return)', c.name], ['Business / DBA name', c.dba], ['Federal tax classification', ''], ['Address', c.addr], ['MC / USDOT', c.mc + ' / ' + c.dot], ['Tax ID (EIN or SSN)', ''], ['Signature', ''], ['Date', '']]));
+  dPdf('W9-' + (c.dot || 'carrier') + '.pdf', 'Form W-9 Information (pre-filled)', 'Pre-filled from public FMCSA data on ' + dToday() + '. The carrier must check the details, add the tax ID and sign.',
+    [['1. Name (as on tax return)', c.name], ['2. Business / DBA name', c.dba], ['3. Federal tax classification', ''], ['5. Address', c.addr], ['MC / USDOT', c.mc + ' / ' + c.dot], ['Part I. Tax ID (EIN or SSN)', ''], ['Part II. Signature', ''], ['Date', '']],
+    ['Use the official IRS Form W-9 for the final signed copy: https://www.irs.gov/pub/irs-pdf/fw9.pdf']);
 }
 function dW9msg() {
   var c = dCur, m = 'Hi ' + (c.officer || '') + ', this is ' + $('drep').value + ' from ' + $('dco').value + '. To onboard ' + c.name + ' please fill in and sign a W-9 and send it back here: https://www.irs.gov/pub/irs-pdf/fw9.pdf Thank you!';
@@ -1201,9 +1221,9 @@ function dW9msg() {
 function dLI() { window.open('https://li-public.fmcsa.dot.gov/LIVIEW/pkg_carrquery.prc_carrlist?n_dotno=' + encodeURIComponent(dCur.dot), '_blank'); }
 function dMC() {
   var c = dCur;
-  dPrint('MC authority summary', '<h1>MC Authority Summary</h1><p class="n">Summary of public FMCSA data on ' + dToday() + '. This is NOT the official FMCSA authority letter. Get that from the carrier or the FMCSA Licensing &amp; Insurance site.</p>' +
-    dTab([['Carrier', c.name], ['MC', c.mc], ['USDOT', c.dot], ['Authority status', c.auth], ['Insurance', c.ins], ['Address', c.addr]]) +
-    '<p class="n">FMCSA snapshot: https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&amp;query_type=queryCarrierSnapshot&amp;query_param=USDOT&amp;query_string=' + esc(c.dot) + '</p>');
+  dPdf('MC-Letter-' + (c.mc || c.dot || 'carrier') + '.pdf', 'Carrier Authority Verification', 'Prepared by ' + $('dco').value + ' on ' + dToday() + ' from public FMCSA data. This is not an official FMCSA document.',
+    [['Carrier', c.name], ['MC number', c.mc], ['USDOT number', c.dot], ['Authority status', c.auth], ['Insurance', c.ins], ['Power units', c.units], ['Safety rating', c.safety], ['Address', c.addr]],
+    ['Verify live on FMCSA: https://li-public.fmcsa.dot.gov/LIVIEW/pkg_carrquery.prc_carrlist?n_dotno=' + c.dot]);
 }
 function dProf() {
   var c = dCur;
@@ -1232,7 +1252,7 @@ $('df').addEventListener('submit', function (e) {
       $('dfound').innerHTML = dFound.map(function (c, i) {
         var B = function (t, f, cls) { return '<button type="button"' + (cls ? ' class="' + cls + '"' : '') + ' onclick="dPick(' + i + ',\'' + f + '\')">' + t + '</button>'; };
         return '<div class="tc"><div class="row"><div><b>' + esc(c.name) + '</b><div class="small">MC ' + esc((c.mc || []).join(', ') || '—') + ' · DOT ' + esc(c.dot) + ' · Authority: ' + esc(c.common || '—') + '</div><div class="small">' + esc(c.address || '') + '</div></div></div>' +
-          '<div class="acts">' + B('🔗 FMCSA authority page', 'dLI', 'go') + B('📄 W-9 form', 'dW9', 'go') + B('W-9 request (WhatsApp)', 'dW9msg') + B('MC authority summary', 'dMC') + B('Dispatch Agreement', 'dAgr') + B('Profile sheet', 'dProf') + '</div></div>';
+          '<div class="acts">' + B('🔗 FMCSA authority page', 'dLI', 'go') + B('⬇ W-9 PDF', 'dW9', 'go') + B('W-9 request (WhatsApp)', 'dW9msg') + B('⬇ MC letter PDF', 'dMC') + B('Dispatch Agreement', 'dAgr') + B('Profile sheet', 'dProf') + '</div></div>';
       }).join('');
     })
     .catch(function () { $('dmsg').className = 'err'; $('dmsg').textContent = 'Could not reach the server.'; });
