@@ -640,7 +640,7 @@ var PAGE_SIZE = 500;
 var bErr = '', bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
 var bNote = '', bNoteNext = '', bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
-var FETCH_CONC = 5, AUTH_CONC = 4, AUTH_CHUNK = 60;
+var FETCH_CONC = 2, AUTH_CONC = 4, AUTH_CHUNK = 60;
 
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
 function loc(x) { return [x.city, x.state].filter(Boolean).join(', ') || '—'; }
