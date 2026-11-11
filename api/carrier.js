@@ -14,20 +14,7 @@ async function get(path, key) {
   return r.json();
 }
 
-// Census row for one DOT number. Optional: returns null if anything fails.
-async function census(dot) {
-  try {
-    const url = CENSUS + '?$limit=1&dot_number=' + encodeURIComponent(String(dot));
-    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
-    if (!r.ok) return null;
-    const rows = await r.json();
-    return Array.isArray(rows) && rows.length ? rows[0] : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// ---- Socrata helpers (same idea as bulk.js: app token + retries) ----
+// ---- Socrata helpers (app token + retries + 429 handling) ----
 const MOTUS = 'https://data.transportation.gov/resource/inys-ebih.json';
 const MOTUS_META = 'https://data.transportation.gov/api/views/inys-ebih.json';
 const INS = 'https://data.transportation.gov/resource/chgs-tx6x.json';
@@ -41,31 +28,79 @@ const tokenHeaders = () => {
 const stripZeros = (v) => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
 const metaCache = {};
 
-async function sodaAt(base, params, ms, tries) {
+// Simple in-memory cache (works while the Vercel function instance stays warm)
+const CACHE_MS = 10 * 60 * 1000;
+const cache = new Map();
+const cacheGet = (k) => {
+  const h = cache.get(k);
+  if (h && Date.now() - h.t < CACHE_MS) return h.v;
+  if (h) cache.delete(k);
+  return null;
+};
+const cacheSet = (k, v) => {
+  if (cache.size > 300) cache.clear();
+  cache.set(k, { t: Date.now(), v });
+};
+
+const wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+
+// until = absolute timestamp (ms) after which we stop retrying (Vercel Hobby limit is 10s)
+async function sodaAt(base, params, ms, tries, until) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
   const max = tries || 3;
   let r;
   for (let i = 0; i < max; i++) {
+    const left = until ? until - Date.now() : 99999;
+    if (i > 0 && left < 1500) break;
+    const timeout = Math.min(ms || 8000, Math.max(left, 1500));
     try {
-      r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+      r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(timeout), headers: tokenHeaders() });
     } catch (e) {
       if (i < max - 1) continue; // first try is often slow (cold cache): retry
       throw new Error('Census server is slow right now. Please press Search again.');
     }
     if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; }
     if (r.status !== 429 && r.status < 500) break;
-    await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
+    if (i === max - 1) break;
+    let pause = 400 * (i + 1);
+    if (r.status === 429) {
+      const ra = Number(r.headers.get('retry-after'));
+      pause = ra > 0 ? ra * 1000 : 900 * (i + 1);
+    }
+    const left2 = until ? until - Date.now() - 1500 : 2000;
+    pause = Math.min(pause, 2000, left2);
+    if (pause <= 0) break;
+    await wait(pause);
   }
-  if (!r.ok) throw new Error('Census API status ' + r.status);
+  if (!r) throw new Error('Census server is slow right now. Please press Search again.');
+  if (!r.ok) {
+    const e = new Error(
+      r.status === 429
+        ? 'Census rate limit (429). Thori dair baad dobara Search karein (SOCRATA_APP_TOKEN lagana behtar ha).'
+        : 'Census API status ' + r.status
+    );
+    e.status = r.status;
+    throw e;
+  }
   return r.json();
+}
+
+// Census row for one DOT number (used for the contact details on QCMobile results). Optional.
+async function census(dot) {
+  try {
+    const rows = await sodaAt(CENSUS, { $limit: 1, dot_number: String(dot) }, 6000, 2, Date.now() + 6500);
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function metaKeys(url) {
   if (metaCache[url] && metaCache[url].length) return metaCache[url];
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000), headers: tokenHeaders() });
     if (r.ok) {
       const m = await r.json();
       const k = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
@@ -75,22 +110,27 @@ async function metaKeys(url) {
   return metaCache[url] || [];
 }
 
-// Census row by MC number (docket1/2/3). Returns null if not found, THROWS if Census is down/slow.
-async function censusByMc(digits) {
+// Census row by MC number. Columns are tried ONE BY ONE (docket1 first) to save requests.
+// Returns null if not found, THROWS if Census is down/slow/rate-limited.
+async function censusByMc(digits, until) {
   const n = String(Number(digits));
   const vals = [n, n.padStart(6, '0'), n.padStart(7, '0'), n.padStart(8, '0')].map((v) => "'" + v + "'").join(',');
-  const tries = ['docket1', 'docket2', 'docket3'].map((col) =>
-    sodaAt(CENSUS, { $limit: 1, $where: col + ' in (' + vals + ')' }, 9000, 3)
-  );
-  const res = await Promise.allSettled(tries);
-  for (const x of res) if (x.status === 'fulfilled' && x.value && x.value.length) return x.value[0];
-  const bad = res.find((x) => x.status === 'rejected');
-  if (bad) throw bad.reason;
+  let lastErr = null;
+  for (const col of ['docket1', 'docket2', 'docket3']) {
+    try {
+      const rows = await sodaAt(CENSUS, { $limit: 1, $where: col + ' in (' + vals + ')' }, 8000, 3, until);
+      if (rows && rows.length) return rows[0];
+    } catch (e) {
+      lastErr = e;
+      if (e.status === 429) break; // other columns will be limited too
+    }
+  }
+  if (lastErr) throw lastErr;
   return null;
 }
 
 // Authority status (Common / Contract / Broker) from the Motus dataset. Optional.
-async function authorityFor(dot) {
+async function authorityFor(dot, until) {
   try {
     const keys = await metaKeys(MOTUS_META);
     const dotCol = ['usdot_number', 'dot_number'].find((k) => keys.indexOf(k) !== -1);
@@ -99,7 +139,7 @@ async function authorityFor(dot) {
     if (!dotCol || !statusCol) return null;
     const d = stripZeros(dot);
     const vals = "'" + d + "','" + d.padStart(8, '0') + "'";
-    const rows = await sodaAt(MOTUS, { $select: [dotCol, typeCol, statusCol].filter(Boolean).join(','), $where: dotCol + ' in (' + vals + ')', $limit: 50 }, 6000, 2);
+    const rows = await sodaAt(MOTUS, { $select: [dotCol, typeCol, statusCol].filter(Boolean).join(','), $where: dotCol + ' in (' + vals + ')', $limit: 50 }, 5000, 1, until);
     if (!rows.length) return null;
     const stat = (re) => {
       const list = rows.filter((r) => !typeCol || re.test(String(r[typeCol] || '')));
@@ -113,7 +153,7 @@ async function authorityFor(dot) {
 }
 
 // BI&PD insurance on file (thousands of dollars) from the Active/Pending Insurance dataset. Optional.
-async function insuranceFor(mcList) {
+async function insuranceFor(mcList, until) {
   try {
     const mc = stripZeros((mcList && mcList[0]) || '');
     if (!mc) return null;
@@ -123,7 +163,7 @@ async function insuranceFor(mcList) {
     const amtCol = keys.find((k) => /max_cov/i.test(k)) || '';
     if (!dockCol) return null;
     const vals = "'MC" + mc + "','" + mc + "'";
-    const rows = await sodaAt(INS, { $select: [dockCol, typeCol, amtCol].filter(Boolean).join(','), $where: dockCol + ' in (' + vals + ')', $limit: 200 }, 6000, 2);
+    const rows = await sodaAt(INS, { $select: [dockCol, typeCol, amtCol].filter(Boolean).join(','), $where: dockCol + ' in (' + vals + ')', $limit: 200 }, 5000, 1, until);
     if (!rows.length) return { bipdOnFile: 0 };
     const isBipd = (r) => /bipd|primary|liab/i.test(String(r[typeCol] || ''));
     const list = typeCol && rows.some(isBipd) ? rows.filter(isBipd) : rows;
@@ -245,7 +285,17 @@ module.exports = async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q) return res.status(400).json({ error: 'missing query' });
 
+  // Vercel Hobby = 10s max; stop retrying around 8.5s
+  const until = Date.now() + 8500;
+
   try {
+    const ck = type + '|' + q.toLowerCase();
+    const hit = cacheGet(ck);
+    if (hit) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json(hit);
+    }
+
     let data;
     const digits = q.replace(/\D/g, '');
     if (type === 'dot') {
@@ -261,11 +311,11 @@ module.exports = async (req, res) => {
     // QCMobile has nothing (new carrier) -> fall back to the Census file
     if (!data || !data.content || (Array.isArray(data.content) && !data.content.length)) {
       let cs = null;
-      if (type === 'mc') cs = await censusByMc(digits);
-      else if (type === 'dot') cs = await sodaAt(CENSUS, { $limit: 1, dot_number: digits }, 9000, 3).then((r) => r[0] || null);
+      if (type === 'mc') cs = await censusByMc(digits, until);
+      else if (type === 'dot') cs = await sodaAt(CENSUS, { $limit: 1, dot_number: digits }, 8000, 3, until).then((r) => r[0] || null);
       if (cs) {
         const shaped = shapeFromCensus(cs);
-        const [au, ins] = await Promise.all([authorityFor(cs.dot_number), insuranceFor(shaped.mc)]);
+        const [au, ins] = await Promise.all([authorityFor(cs.dot_number, until), insuranceFor(shaped.mc, until)]);
         if (au) {
           shaped.common = au.common;
           shaped.contract = au.contract;
@@ -273,8 +323,10 @@ module.exports = async (req, res) => {
           shaped.authorized = au.common === 'Active' || au.contract === 'Active' || au.broker === 'Active';
         }
         if (ins && ins.bipdOnFile > 0) shaped.insurance.bipdOnFile = ins.bipdOnFile;
+        const payload = { results: [shaped] };
+        cacheSet(ck, payload);
         res.setHeader('Cache-Control', 'no-store');
-        return res.status(200).json({ results: [shaped] });
+        return res.status(200).json(payload);
       }
     }
 
@@ -304,8 +356,10 @@ module.exports = async (req, res) => {
       })
     );
 
+    const payload = { results: out };
+    if (out.length) cacheSet(ck, payload);
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ results: out });
+    return res.status(200).json(payload);
   } catch (e) {
     return res.status(502).json({ error: e.message || 'FMCSA request failed' });
   }
