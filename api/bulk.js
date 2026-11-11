@@ -392,6 +392,11 @@ module.exports = async (req, res) => {
         where.push('(' + parts.join(' OR ') + ')');
       } else {
         where.push("add_date >= '" + from + "' AND add_date < '" + nextDay(to) + "'");
+        // Carriers without an MC number have no operating authority: skip them (far fewer rows to scan and check)
+        if (req.query.onlymc === '1' && has('docket1')) {
+          const mcs = [1, 2, 3].filter((n) => has('docket' + n) && has('docket' + n + 'prefix')).map((n) => "docket" + n + "prefix='MC'");
+          where.push(mcs.length ? '(' + mcs.join(' OR ') + ')' : 'docket1 IS NOT NULL');
+        }
       }
       if (stList.length && has('phy_state')) where.push('phy_state in (' + stList.map((x) => "'" + x + "'").join(',') + ')');
       if (cityQ && has('phy_city')) where.push("upper(phy_city) like '%" + cityQ + "%'");
