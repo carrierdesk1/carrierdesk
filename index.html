@@ -550,7 +550,7 @@ $('clear').onclick = function () { if (confirm('Delete all leads?')) { setLeads(
 var found = [];
 function ins(c) {
   var i = c.insurance;
-  if (c.fromCensusOnly) return { t: 'Check', s: 'Not in FMCSA API yet', bad: true };
+  if (c.fromCensusOnly && !(i.bipdOnFile > 0)) return { t: 'Check', s: 'Not in FMCSA API yet', bad: true };
   if (i.bipdOnFile > 0) return { t: 'On File', s: 'BIPD $' + i.bipdOnFile.toLocaleString() + 'K' + (i.bipdRequired ? ' (req. $' + i.bipdRequired + 'K)' : ''), bad: false };
   return { t: 'Not on File', s: 'No active insurance', bad: true };
 }
