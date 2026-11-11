@@ -339,14 +339,16 @@ module.exports = async (req, res) => {
         try {
           const r = await fetch(CENSUS + '?' + q, { headers: headers, signal: AbortSignal.timeout(15000) });
           const body = (await r.text()).slice(0, 120);
-          return { status: r.status, ms: Date.now() - st, body: r.ok ? 'ok' : body };
+          return { status: r.status, ms: Date.now() - st, body: r.ok ? 'ok' : body, retryAfter: r.headers.get('retry-after') || null, limitHeaders: Array.from(r.headers.entries()).filter(function (h) { return /limit|retry|throttl/i.test(h[0]); }) };
         } catch (e) { return { error: String(e && e.message), ms: Date.now() - st }; }
       };
       const out = {
         tokenSet: !!t0,
         tokenLength: t0.length,
         withToken: t0 ? await probe({ 'X-App-Token': t0 }, '$limit=1&$select=dot_number') : 'no token set in Vercel',
+        withTokenAsParam: t0 ? await probe({}, '$limit=1&$select=dot_number&$$app_token=' + encodeURIComponent(t0)) : 'no token set in Vercel',
         withoutToken: await probe({}, '$limit=1&$select=dot_number'),
+        region: process.env.VERCEL_REGION || '',
         dateQuery: await probe(t0 ? { 'X-App-Token': t0 } : {}, '$limit=5&$select=dot_number&$order=add_date&$where=' + encodeURIComponent("status_code='A' AND add_date >= '" + new Date().toISOString().slice(0, 8) + "01'"))
       };
       res.setHeader('Cache-Control', 'no-store');
