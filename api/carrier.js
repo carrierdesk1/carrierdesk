@@ -27,19 +27,108 @@ async function census(dot) {
   }
 }
 
-// Census row by MC number (docket1/2/3), tolerant of leading zeros
-async function censusByMc(digits) {
+// ---- Socrata helpers (same idea as bulk.js: app token + retries) ----
+const MOTUS = 'https://data.transportation.gov/resource/inys-ebih.json';
+const MOTUS_META = 'https://data.transportation.gov/api/views/inys-ebih.json';
+const INS = 'https://data.transportation.gov/resource/chgs-tx6x.json';
+const INS_META = 'https://data.transportation.gov/api/views/chgs-tx6x.json';
+const cleanToken = () => String(process.env.SOCRATA_APP_TOKEN || '').replace(/["'\s]/g, '');
+let tokenBad = false;
+const tokenHeaders = () => {
+  const t = cleanToken();
+  return t && !tokenBad ? { 'X-App-Token': t } : {};
+};
+const stripZeros = (v) => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
+const metaCache = {};
+
+async function sodaAt(base, params, ms, tries) {
+  const qs = Object.keys(params)
+    .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
+    .join('&');
+  const max = tries || 3;
+  let r;
+  for (let i = 0; i < max; i++) {
+    try {
+      r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+    } catch (e) {
+      if (i < max - 1) continue; // first try is often slow (cold cache): retry
+      throw new Error('Census server is slow right now. Please press Search again.');
+    }
+    if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; }
+    if (r.status !== 429 && r.status < 500) break;
+    await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
+  }
+  if (!r.ok) throw new Error('Census API status ' + r.status);
+  return r.json();
+}
+
+async function metaKeys(url) {
+  if (metaCache[url] && metaCache[url].length) return metaCache[url];
   try {
-    const n = String(Number(digits));
-    const vals = [n, n.padStart(6, '0'), n.padStart(7, '0'), n.padStart(8, '0')]
-      .map((v) => "'" + v + "'")
-      .join(',');
-    const where = 'docket1 in (' + vals + ') OR docket2 in (' + vals + ') OR docket3 in (' + vals + ')';
-    const url = CENSUS + '?$limit=1&$where=' + encodeURIComponent(where);
-    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return null;
-    const rows = await r.json();
-    return Array.isArray(rows) && rows.length ? rows[0] : null;
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) {
+      const m = await r.json();
+      const k = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
+      if (k.length) metaCache[url] = k;
+    }
+  } catch (e) { /* ignore */ }
+  return metaCache[url] || [];
+}
+
+// Census row by MC number (docket1/2/3). Returns null if not found, THROWS if Census is down/slow.
+async function censusByMc(digits) {
+  const n = String(Number(digits));
+  const vals = [n, n.padStart(6, '0'), n.padStart(7, '0'), n.padStart(8, '0')].map((v) => "'" + v + "'").join(',');
+  const tries = ['docket1', 'docket2', 'docket3'].map((col) =>
+    sodaAt(CENSUS, { $limit: 1, $where: col + ' in (' + vals + ')' }, 9000, 3)
+  );
+  const res = await Promise.allSettled(tries);
+  for (const x of res) if (x.status === 'fulfilled' && x.value && x.value.length) return x.value[0];
+  const bad = res.find((x) => x.status === 'rejected');
+  if (bad) throw bad.reason;
+  return null;
+}
+
+// Authority status (Common / Contract / Broker) from the Motus dataset. Optional.
+async function authorityFor(dot) {
+  try {
+    const keys = await metaKeys(MOTUS_META);
+    const dotCol = ['usdot_number', 'dot_number'].find((k) => keys.indexOf(k) !== -1);
+    const statusCol = keys.indexOf('op_auth_status') !== -1 ? 'op_auth_status' : keys.find((k) => /auth.*stat/i.test(k));
+    const typeCol = keys.indexOf('op_auth_type') !== -1 ? 'op_auth_type' : keys.find((k) => /auth.*type/i.test(k));
+    if (!dotCol || !statusCol) return null;
+    const d = stripZeros(dot);
+    const vals = "'" + d + "','" + d.padStart(8, '0') + "'";
+    const rows = await sodaAt(MOTUS, { $select: [dotCol, typeCol, statusCol].filter(Boolean).join(','), $where: dotCol + ' in (' + vals + ')', $limit: 50 }, 6000, 2);
+    if (!rows.length) return null;
+    const stat = (re) => {
+      const list = rows.filter((r) => !typeCol || re.test(String(r[typeCol] || '')));
+      if (!list.length) return 'None';
+      return list.some((r) => !/inactive|revok|cancel|terminat|dismiss|withdraw|expire/i.test(String(r[statusCol] || ''))) ? 'Active' : 'Inactive';
+    };
+    return { common: stat(/common/i), contract: stat(/contract/i), broker: stat(/broker|forwarder/i) };
+  } catch (e) {
+    return null;
+  }
+}
+
+// BI&PD insurance on file (thousands of dollars) from the Active/Pending Insurance dataset. Optional.
+async function insuranceFor(mcList) {
+  try {
+    const mc = stripZeros((mcList && mcList[0]) || '');
+    if (!mc) return null;
+    const keys = await metaKeys(INS_META);
+    const dockCol = keys.find((k) => /^docket(_number)?$/i.test(k)) || keys.find((k) => /docket/i.test(k));
+    const typeCol = keys.find((k) => /ins.*type|type.*desc|ins_class|mod_col/i.test(k)) || '';
+    const amtCol = keys.find((k) => /max_cov/i.test(k)) || '';
+    if (!dockCol) return null;
+    const vals = "'MC" + mc + "','" + mc + "'";
+    const rows = await sodaAt(INS, { $select: [dockCol, typeCol, amtCol].filter(Boolean).join(','), $where: dockCol + ' in (' + vals + ')', $limit: 200 }, 6000, 2);
+    if (!rows.length) return { bipdOnFile: 0 };
+    const isBipd = (r) => /bipd|primary|liab/i.test(String(r[typeCol] || ''));
+    const list = typeCol && rows.some(isBipd) ? rows.filter(isBipd) : rows;
+    const amt = list.reduce((mx, r) => Math.max(mx, amtCol ? kNum(r[amtCol]) : 0), 0);
+    return { bipdOnFile: amt };
   } catch (e) {
     return null;
   }
@@ -173,10 +262,19 @@ module.exports = async (req, res) => {
     if (!data || !data.content || (Array.isArray(data.content) && !data.content.length)) {
       let cs = null;
       if (type === 'mc') cs = await censusByMc(digits);
-      else if (type === 'dot') cs = await census(digits);
+      else if (type === 'dot') cs = await sodaAt(CENSUS, { $limit: 1, dot_number: digits }, 9000, 3).then((r) => r[0] || null);
       if (cs) {
+        const shaped = shapeFromCensus(cs);
+        const [au, ins] = await Promise.all([authorityFor(cs.dot_number), insuranceFor(shaped.mc)]);
+        if (au) {
+          shaped.common = au.common;
+          shaped.contract = au.contract;
+          shaped.broker = au.broker;
+          shaped.authorized = au.common === 'Active' || au.contract === 'Active' || au.broker === 'Active';
+        }
+        if (ins && ins.bipdOnFile > 0) shaped.insurance.bipdOnFile = ins.bipdOnFile;
         res.setHeader('Cache-Control', 'no-store');
-        return res.status(200).json({ results: [shapeFromCensus(cs)] });
+        return res.status(200).json({ results: [shaped] });
       }
     }
 
