@@ -62,14 +62,14 @@ function gate(fn) {
 // After a 429 every request in this instance waits (shared cool-down)
 let coolUntil = 0;
 async function socrata(url, ms, tries, label) {
-  const max = tries || 6;
-  const deadline = Date.now() + 48000; // Vercel maxDuration is 60s, stop retrying before that
+  const max = tries || 4;
+  const deadline = Date.now() + 22000; // give up fast: the page retries and shows progress itself
   let r;
   for (let i = 0; i < max; i++) {
     const cool = coolUntil - Date.now();
-    if (cool > 0) await wait(Math.min(cool, 8000));
+    if (cool > 0) await wait(Math.min(cool, 6000));
     try {
-      r = await fetch(url, { signal: AbortSignal.timeout(ms || 20000), headers: tokenHeaders() });
+      r = await fetch(url, { signal: AbortSignal.timeout(Math.max(3000, Math.min(ms || 20000, deadline - Date.now()))), headers: tokenHeaders() });
     } catch (e) {
       // Socrata is slow on the first try (cold cache): the retry is usually much faster
       if (i < max - 1 && Date.now() < deadline) { await wait(300); continue; }
@@ -81,7 +81,7 @@ async function socrata(url, ms, tries, label) {
     if (r.status === 429) {
       // exponential back-off: ~2s, 4s, 8s, 8s ... (or whatever Socrata asks for in Retry-After)
       const ra = Number(r.headers.get('retry-after'));
-      pause = Math.min(ra > 0 ? ra * 1000 : 2000 * Math.pow(2, i) + Math.random() * 700, 8000);
+      pause = Math.min(ra > 0 ? ra * 1000 : 1500 * Math.pow(2, i) + Math.random() * 500, 6000);
       coolUntil = Date.now() + pause;
     }
     if (i < max - 1) {
@@ -331,6 +331,28 @@ function equipmentOf(tractors, trucks, trailers, units) {
 
 module.exports = async (req, res) => {
   try {
+    // Quick health check: open /api/bulk?mode=ping in the browser to see if Socrata is throttling us
+    if (req.query.mode === 'ping') {
+      const t0 = cleanToken();
+      const probe = async (headers, q) => {
+        const st = Date.now();
+        try {
+          const r = await fetch(CENSUS + '?' + q, { headers: headers, signal: AbortSignal.timeout(15000) });
+          const body = (await r.text()).slice(0, 120);
+          return { status: r.status, ms: Date.now() - st, body: r.ok ? 'ok' : body };
+        } catch (e) { return { error: String(e && e.message), ms: Date.now() - st }; }
+      };
+      const out = {
+        tokenSet: !!t,
+        tokenLength: t.length,
+        withToken: t ? await probe({ 'X-App-Token': t }, '$limit=1&$select=dot_number') : 'no token set in Vercel',
+        withoutToken: await probe({}, '$limit=1&$select=dot_number'),
+        dateQuery: await probe(t ? { 'X-App-Token': t } : {}, '$limit=5&$select=dot_number&$order=add_date&$where=' + encodeURIComponent("status_code='A' AND add_date >= '" + new Date().toISOString().slice(0, 8) + "01'"))
+      };
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json(out);
+    }
+
     // Authority is looked up separately and in the background, so the carrier list shows up right away.
     if (req.query.mode === 'auth') {
       const who0 = await requireUser(req, res);
