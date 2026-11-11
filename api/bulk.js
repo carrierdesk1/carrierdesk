@@ -8,6 +8,7 @@ const DATASET = 'az4n-8mr2';
 const CENSUS = 'https://data.transportation.gov/resource/' + DATASET + '.json';
 const META = 'https://data.transportation.gov/api/views/' + DATASET + '.json';
 const PAGE = 1000;
+const FREE_ROWS = 25;
 
 const CARGO = {
   'General Freight': 'genfreight',
@@ -29,13 +30,31 @@ const CARGO = {
 let keyCache = null;
 
 // Optional: a free Socrata app token (set SOCRATA_APP_TOKEN in Vercel) avoids throttling.
-const tokenHeaders = () => (process.env.SOCRATA_APP_TOKEN ? { 'X-App-Token': process.env.SOCRATA_APP_TOKEN } : {});
+let tokenBad = false; // set when Socrata rejects the token, then we continue without it
+const cleanToken = () => String(process.env.SOCRATA_APP_TOKEN || '').replace(/["'\s]/g, '');
+const tokenHeaders = () => {
+  const t = cleanToken();
+  return t && !tokenBad ? { 'X-App-Token': t } : {};
+};
 
-async function soda(params) {
+async function soda(params, ms, tries) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
-  const r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000), headers: tokenHeaders() });
+  const maxTries = tries || 4;
+  let r;
+  for (let i = 0; i < maxTries; i++) {
+    try {
+      r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(ms || 20000), headers: tokenHeaders() });
+    } catch (e) {
+      // Socrata is slow on the first try (cold cache): the retry is usually much faster
+      if (i < maxTries - 1) { await new Promise((ok) => setTimeout(ok, 300)); continue; }
+      throw new Error('Census server is slow right now (timeout). Please press Fetch again.');
+    }
+    if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; } // bad token: retry without it
+    if (r.status !== 429 && r.status < 500) break;
+    await new Promise((ok) => setTimeout(ok, 600 * (i + 1) + Math.random() * 400)); // throttled: wait, then retry
+  }
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     throw new Error('Census API status ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
@@ -78,6 +97,7 @@ const nextDay = (iso) => new Date(Date.parse(iso + 'T00:00:00Z') + 86400000).toI
 
 // ---- Login check via Supabase ----
 // Returns the user, true (login not configured yet, so open), or null (a 401 was already sent).
+const apCache = {};
 async function requireUser(req, res) {
   const base = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
   const anon = process.env.SUPABASE_ANON_KEY || '';
@@ -90,7 +110,24 @@ async function requireUser(req, res) {
       signal: AbortSignal.timeout(6000)
     });
     if (!r.ok) { res.status(401).json({ error: 'Session expired. Please log in again.' }); return null; }
-    return await r.json();
+    const u = await r.json();
+    // Plan: team members and paid (not expired) users are Pro; everyone else is on the Free plan.
+    let hit = apCache[u.id];
+    if (!hit || Date.now() - hit.t > 60000) {
+      let pro = true;
+      try {
+        const pr = await fetch(base + '/rest/v1/profiles?id=eq.' + encodeURIComponent(u.id) + '&select=approved,plan,plan_expires', {
+          headers: { apikey: anon, Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(6000)
+        });
+        if (pr.ok) {
+          const rows = await pr.json();
+          if (rows.length) { const pf = rows[0]; pro = pf.approved === true || (pf.plan === 'paid' && !!pf.plan_expires && Date.parse(pf.plan_expires) > Date.now()); }
+        }
+      } catch (e) { /* profiles not set up: allow */ }
+      hit = apCache[u.id] = { pro: pro, t: Date.now() };
+    }
+    u._pro = hit.pro;
+    return u;
   } catch (e) {
     res.status(502).json({ error: 'Login check failed: ' + (e.message || e) });
     return null;
@@ -106,7 +143,11 @@ async function sodaAt(base, params, ms) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
-  const r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+  let r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+  if (r.status === 403 && !tokenBad && cleanToken()) {
+    tokenBad = true;
+    r = await fetch(base + '?' + qs, { signal: AbortSignal.timeout(ms || 8000), headers: tokenHeaders() });
+  }
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     throw new Error('Motus API status ' + r.status + (t ? ': ' + t.slice(0, 150) : ''));
@@ -285,12 +326,27 @@ module.exports = async (req, res) => {
         const a = p.split(':');
         return { dot: a[0], mc: (a[1] || '').replace(/\D/g, '') };
       });
+      if (!(who1 === true || who1._pro)) {
+        const o1 = {};
+        pairs1.forEach((p) => { o1[p.dot] = { s: 'Unknown', amt: 0 }; });
+        return res.status(200).json({ ins: o1, warnings: ['Insurance check is a Pro feature.'] });
+      }
       const warn1 = [];
       const ins1 = await loadInsurance(pairs1, warn1);
       const out1 = {};
       pairs1.forEach((p) => { out1[p.dot] = (ins1 && ins1[p.dot]) || { s: 'Unknown', amt: 0 }; });
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ ins: out1, warnings: warn1 });
+    }
+
+    // Newest add_date in the Census file (used by the New carriers button and alerts)
+    if (req.query.mode === 'latest') {
+      const who3 = await requireUser(req, res);
+      if (who3 === null) return;
+      const lr = await soda({ $select: 'max(add_date)' }).catch(() => []);
+      const lv = lr && lr[0] ? Object.values(lr[0])[0] : '';
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ latest: day(lv) });
     }
 
     const keys = await getKeys();
@@ -306,6 +362,7 @@ module.exports = async (req, res) => {
     // Login check (only enforced once SUPABASE_URL and SUPABASE_ANON_KEY are set in Vercel)
     const who = await requireUser(req, res);
     if (who === null) return;
+    const isPro = who === true || !!who._pro;
 
     const mode = String(req.query.mode || 'mc');
     const from = String(req.query.from || '').trim();
@@ -372,7 +429,7 @@ module.exports = async (req, res) => {
     }
     async function getCount(where) {
       try {
-        const r = await soda({ $select: 'count(*)', $where: where });
+        const r = await soda({ $select: 'count(*)', $where: where }, 12000, 1);
         const n = parseInt(r && r[0] ? Object.values(r[0])[0] : '', 10);
         return isFinite(n) ? n : null;
       } catch (e) { return null; }
@@ -510,16 +567,22 @@ module.exports = async (req, res) => {
     }
 
     if (mode === 'mc') outRows.sort((a, b) => a.mc.localeCompare(b.mc));
+    let nextOff = raw.length === PAGE ? offset + PAGE : null;
+    if (!isPro) {
+      outRows = offset > 0 ? [] : outRows.slice(0, FREE_ROWS);
+      nextOff = null;
+      warnings.push('Free plan: only the first ' + FREE_ROWS + ' carriers are shown. Upgrade to see all.');
+    }
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       rows: outRows,
       scanned: raw.length,
-      total: total,
+      total: isPro ? total : null,
       plain: plain,
       pageSize: PAGE,
       dropped: drop,
-      nextOffset: raw.length === PAGE ? offset + PAGE : null,
+      nextOffset: nextOff,
       warnings: warnings
     });
   } catch (e) {
