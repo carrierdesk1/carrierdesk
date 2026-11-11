@@ -332,8 +332,8 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <div class="bw" style="margin-bottom:18px"><div id="tstats"></div></div>
       <h3>Team</h3>
       <div class="notice">Team members share one list of leads and have full access. Other signups are customers on the Free plan; search their email below and press +30 days after you receive their payment.</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px"><input id="tq" placeholder="Search customer by email or name" oninput="tShow()" onkeydown="if(event.key==='Enter')tLoad()" style="flex:1"><button type="button" onclick="tLoad()">🔍 Search</button><button type="button" onclick="$('tq').value='';tLoad()">↻ Refresh</button></div>
-      <div class="bw"><div id="tlist"></div></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px"><input id="tmq" placeholder="Search customer by email or name" oninput="tShow()" onkeydown="if(event.key==='Enter')tLoad()" style="flex:1"><button type="button" onclick="tLoad()">🔍 Search</button><button type="button" onclick="$('tmq').value='';tLoad()">↻ Refresh</button></div>
+      <div class="bw"><div id="tmlist"></div></div>
     </section>
 
     <!-- My leads -->
@@ -1412,18 +1412,18 @@ function teamInit() {
 }
 var tCache = [];
 function tLoad() {
-  $('tlist').innerHTML = '<p class="small" style="padding:14px">Loading…</p>';
+  $('tmlist').innerHTML = '<p class="small" style="padding:14px">Loading…</p>';
   sb.from('profiles').select('*').order('created_at').then(function (r) {
-    if (r.error) { $('tlist').innerHTML = '<p class="small err" style="padding:14px">' + esc(r.error.message) + '</p>'; return; }
+    if (r.error) { $('tmlist').innerHTML = '<p class="small err" style="padding:14px">' + esc(r.error.message) + '</p>'; return; }
     tCache = r.data || []; tShow();
   });
 }
-function tShow() { try { tShow2(); } catch (e) { $('tlist').innerHTML = '<p class="small err" style="padding:14px">Team list error: ' + esc(e.message) + '</p>'; } }
+function tShow() { try { tShow2(); } catch (e) { $('tmlist').innerHTML = '<p class="small err" style="padding:14px">Team list error: ' + esc(e.message) + '</p>'; } }
 function tShow2() {
-  var q = ($('tq').value || '').trim().toLowerCase();
+  var q = ($('tmq').value || '').trim().toLowerCase();
   var rows = tCache.filter(function (m) { return !q || String(m.email || '').toLowerCase().indexOf(q) !== -1 || String(m.name || '').toLowerCase().indexOf(q) !== -1; });
-  if (!rows.length) { $('tlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email. (' + tCache.length + ' accounts loaded in total)</p>'; return; }
-  $('tlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
+  if (!rows.length) { $('tmlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email. (' + tCache.length + ' accounts loaded in total)</p>'; return; }
+  $('tmlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
     var me = m.id === session.user.id, live = m.plan === 'paid' && m.plan_expires && Date.parse(m.plan_expires) > Date.now();
     var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free';
     var B = function (t, o) { return '<button type="button" onclick="tSet(\'' + m.id + '\',' + o + ')">' + t + '</button> '; };
