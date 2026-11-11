@@ -1,3 +1,5 @@
+// Bulk carrier search from YOUR Supabase 'census' table (imported from the FMCSA Company Census File).
+// Needs in Vercel: SUPABASE_URL, SUPABASE_SERVICE_KEY (secret key), SUPABASE_ANON_KEY (for login).
 // Bulk carrier search from the FMCSA Company Census File (free, no key).
 // GET /api/bulk?mode=mc&from=500000&to=505000
 // GET /api/bulk?mode=date&from=2026-11-05&to=2026-11-10
@@ -116,30 +118,6 @@ function cached(url, ms, tries, label, ttl) {
   return p;
 }
 const soda = (params, ms, tries, ttl) => cached(CENSUS + '?' + qsOf(params), ms, tries, 'Census', ttl);
-
-// SODA JSON leaves out null fields, so read the full column list from the dataset metadata.
-async function getKeys() {
-  if (keyCache && keyCache.length) return keyCache;
-  let keys = [];
-  try {
-    const r = await fetch(META, { signal: AbortSignal.timeout(6000), headers: tokenHeaders() });
-    if (r.ok) {
-      const m = await r.json();
-      keys = (m.columns || []).map((c) => c.fieldName).filter((n) => n && n.charAt(0) !== ':');
-    }
-  } catch (e) { /* fall back to sampling */ }
-  if (!keys.length) {
-    const set = {};
-    const batches = await Promise.all([
-      soda({ $limit: 200 }).catch(() => []),
-      soda({ $limit: 200, $where: 'docket1 IS NOT NULL' }).catch(() => [])
-    ]);
-    batches.forEach((rows) => rows.forEach((row) => Object.keys(row).forEach((k) => { set[k] = 1; })));
-    keys = Object.keys(set);
-  }
-  keyCache = keys;
-  return keys;
-}
 
 const yes = (v) => v != null && String(v).trim() !== '' && !/^(n|no|false|0)$/i.test(String(v).trim());
 const num = (v) => Number(String(v == null ? 0 : v).replace(/[^0-9.]/g, '')) || 0;
@@ -334,44 +312,100 @@ function statusOf(list, mcDigits, statusCol, typeCol) {
   return a ? 'Active' : p ? 'Pending' : i ? 'Inactive' : 'Unknown';
 }
 
-// Equipment label worked out from the fleet counts in the Census file
-function equipmentOf(tractors, trucks, trailers, units) {
-  if (tractors > 0 && trailers > 0) return 'Big Equipment';
-  if (tractors > 0) return 'Power Only';
-  if (trucks > 1) return 'Multi Trucks';
-  if (trucks === 1) return 'Box Truck';
-  if (units > 1) return 'Multi Trucks';
-  if (units === 1) return 'Box Truck';
-  return 'Unknown';
+
+// ================= Census data now comes from YOUR Supabase "census" table =================
+const SB_URL = () => String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+const SB_KEY = () => String(process.env.SUPABASE_SERVICE_KEY || '').replace(/["'\s]/g, '');
+const EQUIP_OK = ['Big Equipment', 'Power Only', 'Box Truck', 'Multi Trucks', 'Unknown'];
+const SELECT = 'dot_number,legal_name,dba_name,phone,cell_phone,email,officer,power_units,drivers,tractors,trucks,trailers,equipment,cargo,city,state,add_date,mc_n,safety,crashes';
+
+async function sb(path, opts) {
+  const key = SB_KEY();
+  if (!SB_URL() || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_KEY are not set in Vercel.');
+  const o = opts || {};
+  let r;
+  for (let i = 0; i < 3; i++) {
+    try {
+      r = await fetch(SB_URL() + '/rest/v1/' + path, {
+        headers: Object.assign({ apikey: key, Authorization: 'Bearer ' + key }, o.headers || {}),
+        signal: AbortSignal.timeout(o.ms || 25000)
+      });
+    } catch (e) {
+      if (i < 2) { await wait(400); continue; }
+      throw new Error('Database is slow right now (timeout). Please press Fetch again.');
+    }
+    if (r.status < 500) break;
+    await wait(500 * (i + 1));
+  }
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error('Census database error ' + r.status + (t ? ': ' + t.slice(0, 200) : ''));
+  }
+  return r;
 }
+
+// Builds the filter part of the query (everything except paging)
+function censusFilter(q, mode, f, t, from, to) {
+  const p = [];
+  if (mode === 'mc') {
+    p.push('mc_n=gte.' + f, 'mc_n=lte.' + t);
+  } else {
+    p.push('add_date=gte.' + from, 'add_date=lt.' + nextDay(to));
+    p.push('mc_n=not.is.null');
+  }
+  const stList = String(q.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
+  if (stList.length) p.push('state=in.(' + stList.join(',') + ')');
+  const cityQ = String(q.city || '').toUpperCase().replace(/[^A-Z0-9 .\-]/g, '').trim();
+  if (cityQ) p.push('city=ilike.' + encodeURIComponent('*' + cityQ + '*'));
+  if (q.hasemail === '1') p.push('email=not.is.null');
+  if (q.hasphone === '1') p.push('or=' + encodeURIComponent('(phone.not.is.null,cell_phone.not.is.null)'));
+  const minU = parseInt(q.min, 10) || 0, maxU = parseInt(q.max, 10) || 0;
+  if (minU) p.push('power_units=gte.' + minU);
+  if (maxU) p.push('power_units=lte.' + maxU);
+  const eq = String(q.equip || '').split('|').filter((x) => EQUIP_OK.indexOf(x) !== -1);
+  if (eq.length) p.push('equipment=in.(' + eq.map((x) => encodeURIComponent('"' + x + '"')).join(',') + ')');
+  const cg = String(q.cargo || '').split('|').filter((x) => CARGO[x]);
+  if (cg.length) {
+    const arr = '{' + cg.map((x) => '"' + x + '"').join(',') + '}';
+    p.push('cargo=' + (q.match === 'all' ? 'cs.' : 'ov.') + encodeURIComponent(arr));
+  }
+  return p.join('&');
+}
+
+const rowOut = (c) => ({
+  dot: String(c.dot_number),
+  mc: c.mc_n ? 'MC' + c.mc_n : '',
+  name: c.legal_name || c.dba_name || '',
+  dba: c.dba_name || '',
+  phone: fmtPhone(c.phone),
+  cellPhone: fmtPhone(c.cell_phone),
+  email: (c.email || '').toLowerCase(),
+  officer: c.officer || '',
+  powerUnits: c.power_units || 0,
+  drivers: c.drivers || 0,
+  tractors: c.tractors || 0,
+  straightTrucks: c.trucks || 0,
+  trailers: c.trailers || 0,
+  equipment: c.equipment || 'Unknown',
+  cargo: c.cargo || [],
+  city: c.city || '',
+  state: c.state || '',
+  addDate: day(c.add_date),
+  safety: c.safety || '',
+  crashes: c.crashes == null ? '' : c.crashes
+});
 
 module.exports = async (req, res) => {
   try {
-    // Quick health check: open /api/bulk?mode=ping in the browser to see if Socrata is throttling us
     if (req.query.mode === 'ping') {
-      const t0 = cleanToken();
-      const probe = async (headers, q) => {
-        const st = Date.now();
-        try {
-          const r = await fetch(CENSUS + '?' + q, { headers: headers, signal: AbortSignal.timeout(15000) });
-          const body = (await r.text()).slice(0, 120);
-          return { status: r.status, ms: Date.now() - st, body: r.ok ? 'ok' : body, retryAfter: r.headers.get('retry-after') || null, limitHeaders: Array.from(r.headers.entries()).filter(function (h) { return /limit|retry|throttl/i.test(h[0]); }) };
-        } catch (e) { return { error: String(e && e.message), ms: Date.now() - st }; }
-      };
-      const out = {
-        tokenSet: !!t0,
-        tokenLength: t0.length,
-        withToken: t0 ? await probe({ 'X-App-Token': t0 }, '$limit=1&$select=dot_number') : 'no token set in Vercel',
-        withTokenAsParam: t0 ? await probe({}, '$limit=1&$select=dot_number&$$app_token=' + encodeURIComponent(t0)) : 'no token set in Vercel',
-        withoutToken: await probe({}, '$limit=1&$select=dot_number'),
-        region: process.env.VERCEL_REGION || '',
-        dateQuery: await probe(t0 ? { 'X-App-Token': t0 } : {}, '$limit=5&$select=dot_number&$order=add_date&$where=' + encodeURIComponent("status_code='A' AND add_date >= '" + new Date().toISOString().slice(0, 8) + "01'"))
-      };
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json(out);
+      const st = Date.now();
+      try {
+        const r = await sb('census?select=dot_number&limit=1');
+        return res.status(200).json({ ok: true, ms: Date.now() - st, sample: await r.json() });
+      } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
     }
 
-    // Authority is looked up separately and in the background, so the carrier list shows up right away.
+    // Authority status (still from FMCSA Motus data, small requests, loaded in the background by the page)
     if (req.query.mode === 'auth') {
       const who0 = await requireUser(req, res);
       if (who0 === null) return;
@@ -418,28 +452,22 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ins: out1, warnings: warn1 });
     }
 
-    // Newest add_date in the Census file (used by the New carriers button and alerts)
+    // Newest add_date in your census table
     if (req.query.mode === 'latest') {
       const who3 = await requireUser(req, res);
       if (who3 === null) return;
-      const lr = await soda({ $select: 'add_date', $order: 'add_date DESC', $where: 'add_date IS NOT NULL', $limit: 1 }, 15000, 2, 6 * 3600 * 1000).catch(() => []);
-      const lv = lr && lr[0] ? Object.values(lr[0])[0] : '';
-      if (lv) res.setHeader('Cache-Control', 'private, max-age=3600');
-      else res.setHeader('Cache-Control', 'no-store');
+      const r = await sb('census?select=add_date&add_date=not.is.null&order=add_date.desc&limit=1');
+      const rows = await r.json();
+      const lv = rows && rows[0] ? rows[0].add_date : '';
+      res.setHeader('Cache-Control', lv ? 'private, max-age=3600' : 'no-store');
       return res.status(200).json({ latest: day(lv) });
     }
 
-    const keys = await getKeys();
-    const has = (k) => keys.indexOf(k) !== -1;
-
     if (req.query.debug) {
-      const sample = await soda({ $limit: 1, $where: 'email_address IS NOT NULL' }).catch(() => []);
-      const motusColumns = await getMotusKeys();
-      const motusSample = await sodaAt(MOTUS, { $limit: 2 }, 6000).catch((e) => String(e.message || e));
-      return res.status(200).json({ columnCount: keys.length, columns: keys, sample: sample[0] || null, motusColumns: motusColumns, motusSample: motusSample, insColumns: await getInsKeys(), insSample: await sodaAt(INS, { $limit: 2 }, 6000).catch((e) => String(e.message || e)) });
+      const r = await sb('census?select=' + SELECT + '&limit=1');
+      return res.status(200).json({ source: 'supabase census table', sample: (await r.json())[0] || null });
     }
 
-    // Login check (only enforced once SUPABASE_URL and SUPABASE_ANON_KEY are set in Vercel)
     const who = await requireUser(req, res);
     if (who === null) return;
     const isPro = who === true || !!who._pro;
@@ -449,209 +477,50 @@ module.exports = async (req, res) => {
     const to = String(req.query.to || '').trim();
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const warnings = [];
-    const stList = String(req.query.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
-    const cityQ = String(req.query.city || '').toUpperCase().replace(/[^A-Z0-9 .\-]/g, '').trim();
-    const needEmail = req.query.hasemail === '1';
-    const needPhone = req.query.hasphone === '1';
-
-    let f = '', t = '';
-    let order = 'dot_number';
-
-    function buildWhere(useLen) {
-      const where = [];
-      if (has('status_code')) where.push("status_code='A'");
-      if (mode === 'mc') {
-        const parts = [];
-        [1, 2, 3].forEach((n) => {
-          const nk = 'docket' + n;
-          if (!has(nk)) return;
-          const pk = nk + 'prefix';
-          parts.push('(' + (has(pk) ? pk + "='MC' AND " : '') + nk + " >= '" + f + "' AND " + nk + " <= '" + t + "'" +
-            (useLen ? ' AND ' + nk + " like '" + '_'.repeat(f.length) + "'" : '') + ')');
-        });
-        where.push('(' + parts.join(' OR ') + ')');
-      } else {
-        where.push("add_date >= '" + from + "' AND add_date < '" + nextDay(to) + "'");
-        // Carriers without an MC number have no operating authority: skip them (far fewer rows to scan and check)
-        if (req.query.onlymc === '1' && has('docket1')) {
-          const mcs = [1, 2, 3].filter((n) => has('docket' + n) && has('docket' + n + 'prefix')).map((n) => "docket" + n + "prefix='MC'");
-          where.push(mcs.length ? '(' + mcs.join(' OR ') + ')' : 'docket1 IS NOT NULL');
-        }
-      }
-      if (stList.length && has('phy_state')) where.push('phy_state in (' + stList.map((x) => "'" + x + "'").join(',') + ')');
-      if (cityQ && has('phy_city')) where.push("upper(phy_city) like '%" + cityQ + "%'");
-      if (needEmail && has('email_address')) where.push('email_address IS NOT NULL');
-      if (needPhone && has('phone')) where.push(has('cell_phone') ? '(phone IS NOT NULL OR cell_phone IS NOT NULL)' : 'phone IS NOT NULL');
-      return where.join(' AND ');
-    }
+    let f = '', t = '', order = 'mc_n.asc,dot_number.asc';
 
     if (mode === 'mc') {
       f = from.replace(/\D/g, '');
       t = to.replace(/\D/g, '');
       if (!f || !t) return res.status(400).json({ error: 'Enter both From and To MC numbers' });
-      if (f.length !== t.length) return res.status(400).json({ error: 'From and To must have the same number of digits (e.g. 500000 to 505000)' });
-      if (t < f) return res.status(400).json({ error: 'To must be bigger than From' });
-      if (!has('docket1')) return res.status(500).json({ error: 'No docket (MC) column in Census file. Open /api/bulk?debug=1' });
-      order = 'docket1,dot_number';
+      if (Number(t) < Number(f)) return res.status(400).json({ error: 'To must be bigger than From' });
     } else {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
         return res.status(400).json({ error: 'Use YYYY-MM-DD dates' });
       }
-      if (!has('add_date')) return res.status(500).json({ error: 'No add_date column in Census file' });
-      order = 'add_date,dot_number';
+      order = 'add_date.asc,dot_number.asc';
     }
 
-    // Only ask Census for the columns we actually use: far smaller download, much faster.
-    const sel = keys.filter((k) =>
-      /^(dot_number|legal_name|dba_name|phone|cell_phone|email_address|company_officer_1|power_units|total_drivers|phy_city|phy_state|add_date|status_code|docket[123](prefix)?)$/.test(k) ||
-      /^(crgo|cargo)/i.test(k) || /^(own|trm|trp)(tract|truck|trail)/i.test(k) || /(safety.*rating|^rating$|crash)/i.test(k)
-    ).join(',');
-    async function getPage(where, off) {
-      const p = { $where: where, $order: order, $limit: PAGE, $offset: off };
-      if (sel) p.$select = sel;
-      try { return await soda(p); }
-      catch (e) { if (!sel) throw e; delete p.$select; return await soda(p); }
-    }
-    async function getCount(where) {
-      try {
-        const r = await soda({ $select: 'count(*)', $where: where }, 10000, 1, 30 * 60 * 1000);
-        const n = parseInt(r && r[0] ? Object.values(r[0])[0] : '', 10);
-        return isFinite(n) ? n : null;
-      } catch (e) { return null; }
+    const filter = censusFilter(req.query, mode, f, t, from, to);
+    const url = 'census?select=' + SELECT + '&' + filter + '&order=' + order + '&limit=' + PAGE + '&offset=' + offset;
+    const headers = offset === 0 ? { Prefer: 'count=exact' } : {};
+    const r = await sb(url, { headers: headers, ms: 28000 });
+    const raw = await r.json();
+    let total = null;
+    if (offset === 0) {
+      const cr = String(r.headers.get('content-range') || '');
+      const n = parseInt(cr.split('/')[1], 10);
+      total = isFinite(n) ? n : null;
     }
 
-    // On the first request also ask how many records match in total, so the page can fetch all the rest in parallel.
-    let raw, total = null, plain = req.query.plain === '1' || mode !== 'mc';
-    if (!plain) {
-      // MC mode: ask Census for exact-length MCs only; if that filter is not accepted, fall back to plain.
-      const wLen = buildWhere(true);
-      try {
-        const jobs = [getPage(wLen, offset)];
-        if (offset === 0) jobs.push(getCount(wLen));
-        const out = await Promise.all(jobs);
-        raw = out[0];
-        total = out.length > 1 ? out[1] : null;
-        if (!raw.length && offset === 0) plain = true;
-      } catch (e) { plain = true; }
-    }
-    if (plain) {
-      const wPlain = buildWhere(false);
-      const jobs = [getPage(wPlain, offset)];
-      if (offset === 0) jobs.push(getCount(wPlain));
-      const out = await Promise.all(jobs);
-      raw = out[0];
-      total = out.length > 1 ? out[1] : null;
-    }
-
-    // Post filters
-    const minUnits = parseInt(req.query.min, 10) || 0;
-    const maxUnits = parseInt(req.query.max, 10) || 0;
-    const equipWanted = String(req.query.equip || '').split('|').filter(Boolean);
-    const wanted = String(req.query.cargo || '').split('|').filter(Boolean);
-    const match = req.query.match === 'all' ? 'all' : 'any';
-
-    const cargoKeys = keys.filter((k) => /^(crgo|cargo)/i.test(k));
-    const cargoCol = {};
-    Object.keys(CARGO).forEach((label) => {
-      const k = cargoKeys.find((x) => x.toLowerCase().indexOf(CARGO[label]) !== -1);
-      if (k) cargoCol[label] = k;
-    });
-    wanted.forEach((w) => {
-      if (!cargoCol[w]) warnings.push('Cargo "' + w + '" not found in Census, filter ignored.');
-    });
-    const wantedOk = wanted.filter((w) => cargoCol[w]);
-
-    const tractKeys = keys.filter((k) => /^(own|trm|trp)tract/i.test(k));
-    const truckKeys = keys.filter((k) => /^(own|trm|trp)truck/i.test(k));
-    const trailKeys = keys.filter((k) => /^(own|trm|trp)trail/i.test(k));
-    if (equipWanted.length && !tractKeys.length && !truckKeys.length) {
-      warnings.push('Fleet breakdown not found in Census, equipment filter ignored.');
-    }
-
-    const ratingKey = keys.find((k) => /^(safety_?rating|rating)$/i.test(k)) || keys.find((k) => /safety.*rating/i.test(k)) || '';
-    const crashAll = keys.filter((k) => /crash/i.test(k));
-    const crashKey = crashAll.find((k) => /total/i.test(k)) || '';
-
+    let rows = raw.map(rowOut);
     const drop = { units: 0, equip: 0, cargo: 0, auth: 0 };
-    const rows = [];
-    raw.forEach((c) => {
-      // Only the MC that is inside the requested range
-      let mc = '';
-      if (mode === 'mc') {
-        for (let n = 1; n <= 3; n++) {
-          const d = String(c['docket' + n] || '').trim();
-          const p = String(c['docket' + n + 'prefix'] || 'MC').toUpperCase();
-          if (p === 'MC' && d.length === f.length && d >= f && d <= t) { mc = 'MC' + d; break; }
-        }
-        if (!mc) return;
-      } else {
-        for (let n = 1; n <= 3; n++) {
-          const d = String(c['docket' + n] || '').trim();
-          const p = String(c['docket' + n + 'prefix'] || 'MC').toUpperCase();
-          if (d && p === 'MC') { mc = 'MC' + d; break; }
-        }
-      }
-
-      const tractors = tractKeys.reduce((s, k) => s + num(c[k]), 0);
-      const trucks = truckKeys.reduce((s, k) => s + num(c[k]), 0);
-      const trailers = trailKeys.reduce((s, k) => s + num(c[k]), 0);
-      const units = num(c.power_units) || tractors + trucks;
-      if (units < minUnits || (maxUnits && units > maxUnits)) { drop.units++; return; }
-
-      const equipment = equipmentOf(tractors, trucks, trailers, units);
-      if (equipWanted.length && (tractKeys.length || truckKeys.length) && equipWanted.indexOf(equipment) === -1) { drop.equip++; return; }
-
-      const carried = Object.keys(cargoCol).filter((l) => yes(c[cargoCol[l]]));
-      if (wantedOk.length) {
-        const ok = match === 'all' ? wantedOk.every((w) => carried.indexOf(w) !== -1) : wantedOk.some((w) => carried.indexOf(w) !== -1);
-        if (!ok) { drop.cargo++; return; }
-      }
-
-      rows.push({
-        dot: c.dot_number,
-        mc: mc,
-        name: c.legal_name || c.dba_name || '',
-        dba: c.dba_name || '',
-        phone: fmtPhone(c.phone),
-        cellPhone: fmtPhone(c.cell_phone),
-        email: (c.email_address || '').toLowerCase(),
-        officer: c.company_officer_1 || '',
-        powerUnits: units,
-        drivers: num(c.total_drivers),
-        tractors: tractors,
-        straightTrucks: trucks,
-        trailers: trailers,
-        equipment: equipment,
-        cargo: carried,
-        city: c.phy_city || '',
-        state: c.phy_state || '',
-        addDate: day(c.add_date),
-        safety: ratingKey ? String(c[ratingKey] || '') : '',
-        crashes: crashAll.length ? (crashKey ? num(c[crashKey]) : crashAll.reduce((sum, k) => sum + num(c[k]), 0)) : ''
-      });
-    });
-
-    // Authority status per carrier
-    // Skipped here when no authority filter is chosen: the page asks for it afterwards (mode=auth), so rows appear much faster.
-    const authWanted = String(req.query.auth || '').toLowerCase();
     let outRows = rows;
+
+    // Authority filter (optional): only when the user picked Active / Inactive
+    const authWanted = String(req.query.auth || '').toLowerCase();
     if (authWanted || req.query.noauth !== '1') {
-      const au = await loadAuthority(rows.map((r) => r.dot), warnings);
-      rows.forEach((r) => {
-        const list = au.ok ? (au.map[stripZeros(r.dot)] || []) : [];
-        r.authority = list.length ? statusOf(list, stripZeros(r.mc), au.statusCol, au.typeCol) : 'Unknown';
-        if (!r.mc && list.length) {
-          const d = list.find((x) => /^MC/i.test(String(x.docket_number || '')));
-          if (d) r.mc = String(d.docket_number).toUpperCase();
-        }
+      const au = await loadAuthority(rows.map((x) => x.dot), warnings);
+      rows.forEach((x) => {
+        const list = au.ok ? (au.map[stripZeros(x.dot)] || []) : [];
+        x.authority = list.length ? statusOf(list, stripZeros(x.mc), au.statusCol, au.typeCol) : 'Unknown';
       });
       if (authWanted) {
-        if (au.ok) { outRows = rows.filter((r) => r.authority.toLowerCase() === authWanted); drop.auth = rows.length - outRows.length; }
+        if (au.ok) { outRows = rows.filter((x) => x.authority.toLowerCase() === authWanted); drop.auth = rows.length - outRows.length; }
         else if (rows.length) warnings.push('Authority filter ignored because authority data could not be loaded.');
       }
     }
 
-    if (mode === 'mc') outRows.sort((a, b) => a.mc.localeCompare(b.mc));
     let nextOff = raw.length === PAGE ? offset + PAGE : null;
     if (!isPro) {
       outRows = offset > 0 ? [] : outRows.slice(0, FREE_ROWS);
@@ -664,7 +533,7 @@ module.exports = async (req, res) => {
       rows: outRows,
       scanned: raw.length,
       total: isPro ? total : null,
-      plain: plain,
+      plain: true,
       pageSize: PAGE,
       dropped: drop,
       nextOffset: nextOff,
