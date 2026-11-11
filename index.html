@@ -640,7 +640,7 @@ var PAGE_SIZE = 500;
 var bErr = '', bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
 var bNote = '', bNoteNext = '', bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
-var FETCH_CONC = 2, AUTH_CONC = 4, AUTH_CHUNK = 60;
+var FETCH_CONC = 3, AUTH_CONC = 6, AUTH_CHUNK = 100;
 
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
 function loc(x) { return [x.city, x.state].filter(Boolean).join(', ') || '—'; }
@@ -675,7 +675,7 @@ function bStatus() {
   $('bmsg').className = bErr ? 'err' : '';
   $('bmsg').textContent = t;
 }
-function bSoon() { if (bTimer) return; bTimer = setTimeout(function () { bTimer = null; bRender(); }, 250); }
+function bSoon() { if (bTimer) return; bTimer = setTimeout(function () { bTimer = null; bRender(); }, 1200); }
 function bInsWanted() { return $('bins').value !== ''; }
 function bLeadMap() { var m = {}; getLeads().forEach(function (x) { m[x.dot] = x.status || 'New'; }); return m; }
 function bSortVal(x, k) {
@@ -703,7 +703,7 @@ function bView(lm) {
     x._lead = lm[x.dot] || '';
     if (hide && x._lead) return false;
     if (insOn && x.ins === 'None') return false;
-    if (aw && x.authority && x.authority.toLowerCase() !== aw) return false;
+    if (aw && (!x.authority || x.authority.toLowerCase() !== aw)) return false;
     return true;
   });
   var k = bSort.k, d = bSort.d;
@@ -735,6 +735,11 @@ function bTargets() {
   return bView(bLeadMap());
 }
 function bRender() {
+  var _sy = window.pageYOffset || document.documentElement.scrollTop || 0;
+  bRender2();
+  if (window.pageYOffset !== _sy) window.scrollTo(0, _sy);
+}
+function bRender2() {
   var lm = bLeadMap(), view = bView(lm);
   var c = bCounts(view);
   var defs = [['Verified carriers', c.n, '🚚', '#1a5fe0', '#dbe7ff'], ['With email', c.email, '✉️', '#16a34a', '#dcfce7'], ['With phone', c.phone, '📞', '#7c3aed', '#ede9fe'], ['States', c.states, '📍', '#f97316', '#ffedd5']];
