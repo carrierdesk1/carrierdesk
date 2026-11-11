@@ -37,13 +37,20 @@ const tokenHeaders = () => {
   return t && !tokenBad ? { 'X-App-Token': t } : {};
 };
 
-async function soda(params) {
+async function soda(params, ms, tries) {
   const qs = Object.keys(params)
     .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
     .join('&');
+  const maxTries = tries || 4;
   let r;
-  for (let i = 0; i < 4; i++) {
-    r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(9000), headers: tokenHeaders() });
+  for (let i = 0; i < maxTries; i++) {
+    try {
+      r = await fetch(CENSUS + '?' + qs, { signal: AbortSignal.timeout(ms || 20000), headers: tokenHeaders() });
+    } catch (e) {
+      // Socrata is slow on the first try (cold cache): the retry is usually much faster
+      if (i < maxTries - 1) { await new Promise((ok) => setTimeout(ok, 300)); continue; }
+      throw new Error('Census server is slow right now (timeout). Please press Fetch again.');
+    }
     if (r.status === 403 && !tokenBad && cleanToken()) { tokenBad = true; i--; continue; } // bad token: retry without it
     if (r.status !== 429 && r.status < 500) break;
     await new Promise((ok) => setTimeout(ok, 600 * (i + 1) + Math.random() * 400)); // throttled: wait, then retry
@@ -422,7 +429,7 @@ module.exports = async (req, res) => {
     }
     async function getCount(where) {
       try {
-        const r = await soda({ $select: 'count(*)', $where: where });
+        const r = await soda({ $select: 'count(*)', $where: where }, 12000, 1);
         const n = parseInt(r && r[0] ? Object.values(r[0])[0] : '', 10);
         return isFinite(n) ? n : null;
       } catch (e) { return null; }
