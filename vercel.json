@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/bulk.js": { "maxDuration": 60 }
+  }
+}
