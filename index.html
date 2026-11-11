@@ -645,7 +645,7 @@ var PAGE_SIZE = 500;
 var bErr = '', bulk = [], bSeen = {}, bBase = '', bScanned = 0, bLoading = false, bStop = false, bPage = 1, bWarn = [], bRun = 0;
 var bQueue = [], bActive = 0, bDone = 0, bTotal = null, bPlain = false, bTimer = null;
 var bNote = '', bNoteNext = '', bDrop = { units: 0, equip: 0, cargo: 0, auth: 0 }, bAuthQ = [], bAuthActive = 0, bInsQ = [], bInsActive = 0, bSel = {}, bSort = { k: '', d: 1 }, bViewN = 0;
-var FETCH_CONC = 2, AUTH_CONC = 2, AUTH_CHUNK = 100;
+var FETCH_CONC = 2, AUTH_CONC = 1, AUTH_CHUNK = 100;
 
 function eqClass(e) { return 'eq-' + String(e || 'Unknown').split(' ')[0]; }
 function loc(x) { return [x.city, x.state].filter(Boolean).join(', ') || '—'; }
@@ -813,7 +813,14 @@ function bGet(off, run, tries) {
   return apiFetch(bUrl(off))
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
     .then(function (x) { if (!x.ok) throw new Error(x.d.error || 'Error'); return x.d; })
-    .catch(function (e) { if (tries < 1 && run === bRun) return bGet(off, run, tries + 1); throw e; });
+    .catch(function (e) {
+    if (tries < 4 && run === bRun && !bStop) {
+      var busy = /429|too many|busy|slow|timeout/i.test(e.message || '');
+      return new Promise(function (ok) { setTimeout(ok, busy ? 3000 * (tries + 1) : 400); })
+        .then(function () { return bGet(off, run, tries + 1); });
+    }
+    throw e;
+  });
 }
 function bAddRows(d) {
   (d.rows || []).forEach(function (r) {
