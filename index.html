@@ -209,6 +209,8 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <a href="#" data-view="leads"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>My Leads<span class="bd" id="leadBadge">0</span></a>
       <a href="#" data-view="track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Carrier Tracker</a>
       <a href="#" data-view="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Documents</a>
+      <a href="#" data-view="pipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>Pipeline</a>
+      <a href="#" data-view="team" id="navTeam" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.4c2.2.7 3.5 2.6 3.5 5.6"/></svg>Team</a>
       <a href="#" id="navLogout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Logout</a>
     </nav>
     <div class="sp"></div>
@@ -225,6 +227,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
         <div class="umenu" id="umMenu"><div class="em" id="umEmail"></div><button type="button" id="umLogout">Log out</button></div>
       </div>
     </header>
+    <div id="planbar" style="display:none;margin:10px 28px 0;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border-radius:12px;padding:8px 14px;box-shadow:0 2px 10px rgba(15,23,42,.08)"></div>
 
     <!-- Dashboard -->
     <section id="viewDash" class="pad">
@@ -239,6 +242,8 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <div class="bulkgrid">
         <form id="bf" class="panel bpanel">
           <div class="ptitle">🔍 Bulk search</div>
+          <div class="bform" style="padding-bottom:0"><select id="ssel"><option value="">Saved searches…</option></select><button type="button" id="ssrun">▶ Run</button><button type="button" id="sssave">💾 Save current</button><label class="psz" title="Alert works for Date range searches"><input type="checkbox" id="ssalert" style="width:16px;height:16px;padding:0"> 🔔 alert</label><button type="button" id="ssdel">🗑</button></div>
+          <div id="salert" class="notice" style="display:none;margin:12px 16px 0"></div>
           <div class="bform">
             <select id="bmode"><option value="mc">MC range</option><option value="date">Date range (new carriers)</option></select>
             <div id="bmc" style="display:contents"><input id="bfrom" placeholder="From MC, e.g. 500000" inputmode="numeric"><input id="bto" placeholder="To MC, e.g. 505000" inputmode="numeric"></div>
@@ -282,6 +287,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
           <button id="bselall" type="button">☑ Select all shown</button>
           <button id="bselnone" type="button" style="display:none">Clear selection</button>
           <button id="bsave" type="button" class="btn-o">⬇ Save all to leads</button>
+          <span id="bassignwrap" style="display:none"><select id="bassign"></select> <button type="button" id="bassignbtn" class="btn-o">👤 Assign</button></span>
           <button id="bcsv" type="button" class="btn-g">Export to Excel (CSV)</button>
         </div>
       </div>
@@ -317,6 +323,19 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <div id="dfound"></div>
     </section>
 
+    <!-- Pipeline -->
+    <section id="viewPipe" class="pad" style="display:none;margin-top:24px"><h3>Pipeline</h3><div id="pipe"></div></section>
+
+    <!-- Team -->
+    <section id="viewTeam" class="pad" style="display:none;margin-top:24px">
+      <h3>Team activity</h3>
+      <div class="bw" style="margin-bottom:18px"><div id="tstats"></div></div>
+      <h3>Team</h3>
+      <div class="notice">Team members share one list of leads and have full access. Other signups are customers on the Free plan; search their email below and press +30 days after you receive their payment.</div>
+      <input id="tq" placeholder="Search customer by email or name" oninput="tShow()" style="width:100%;margin-bottom:10px">
+      <div class="bw"><div id="tlist"></div></div>
+    </section>
+
     <!-- My leads -->
     <section id="viewLeads" class="pad" style="display:none;margin-top:24px">
       <h3>My leads</h3>
@@ -329,6 +348,9 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
   </div>
 </div>
 
+<div id="tgate" style="display:none;position:fixed;inset:0;z-index:99;background:#071328;color:#fff;align-items:center;justify-content:center;text-align:center;padding:24px"><div><h2>⏳ Waiting for approval</h2><p>Your account is created. An admin must approve it before you can use CarrierDesk.</p><button type="button" class="go" onclick="$('navLogout').click()">Log out</button></div></div>
+<div class="mo" id="upmo"><div class="mbox"><h3>⭐ Pro plan · 30 days</h3><div id="upbody"></div><div class="mrow"><button type="button" onclick="$('upmo').style.display='none'">Close</button></div></div></div>
+<div class="mo" id="lgmo"><div class="mbox"><div id="lgbody"></div><div class="mrow"><button type="button" onclick="$('lgmo').style.display='none'">Close</button></div></div></div>
 <div class="mo" id="dmo"><div class="mbox">
 <h3>📄 Carrier documents</h3><div class="small" id="dtitle"></div>
 <label class="fl">Your company</label><input type="text" id="dco" value="M&amp;H Dispatch Solutions">
@@ -469,6 +491,8 @@ function showView(v) {
   $('viewLeads').style.display = v === 'leads' ? '' : 'none';
   $('viewTrack').style.display = v === 'track' ? '' : 'none';
   $('viewDocs').style.display = v === 'docs' ? '' : 'none';
+  $('viewTeam').style.display = v === 'team' ? '' : 'none';
+  $('viewPipe').style.display = v === 'pipe' ? '' : 'none';
   Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) { a.className = a.getAttribute('data-view') === v ? 'on' : ''; });
   if (v === 'leads') renderLeads();
   if (v === 'track') tRender();
@@ -492,18 +516,19 @@ function setStatus(i, v) { var l = getLeads(); l[i].status = v; setLeads(l); }
 function setField(i, f, v) { var l = getLeads(); if (l[i]) { l[i][f] = v; setLeads(l); } }
 function renderLeads() {
   var l = getLeads();
-  $('leadBadge').textContent = l.length;
-  if (!l.length) { $('leads').innerHTML = '<p class="small" style="padding:16px">No leads yet. Search a carrier and choose Save lead.</p>'; return; }
+  $('leadBadge').textContent = l.filter(lgMine).length;
+  if (!l.filter(lgMine).length) { $('leads').innerHTML = '<p class="small" style="padding:16px">No leads yet. Search a carrier and choose Save lead.</p>'; return; }
   var opts = ['New', 'Contacted', 'Interested', 'Onboarded', 'Not interested'];
   var today = new Date().toISOString().slice(0, 10), due = 0;
   var rows = l.map(function (x, i) {
+    if (!lgMine(x)) return '';
     var isDue = x.follow && x.follow <= today && x.status !== 'Onboarded' && x.status !== 'Not interested';
     if (isDue) due++;
     return '<tr' + (isDue ? ' class="due"' : '') + '><td>' + esc(x.name) + '</td><td>' + esc(x.mc) + ' / ' + esc(x.dot) + '</td><td>' + esc(x.officer || '—') + '</td><td>' + esc(x.email || '—') + '<br><span class="small">' + esc(x.phone || '') + '</span></td><td><select onchange="setStatus(' + i + ',this.value)">' +
       opts.map(function (o) { return '<option' + (o === x.status ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
       '</select></td><td class="lt" style="min-width:140px"><input type="date" value="' + esc(x.follow || '') + '" onchange="setField(' + i + ',\'follow\',this.value);renderLeads()"></td>' +
       '<td class="lt" style="min-width:200px"><input type="text" placeholder="Notes…" value="' + esc(x.note || '') + '" onchange="setField(' + i + ',\'note\',this.value)"></td>' +
-      '<td><button type="button" onclick="docLead(' + i + ')">📄 Docs</button> <button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
+      '<td><button type="button" onclick="lgOpen(\'' + x.dot + '\')">📞 Log</button> <button type="button" onclick="docLead(' + i + ')">📄 Docs</button> <button type="button" onclick="del(' + i + ')">Remove</button></td></tr>';
   }).join('');
   $('leads').innerHTML = '<p class="small" style="padding:12px 16px 0">' + (due ? '⏰ Follow-ups due: <b>' + due + '</b> (highlighted)' : 'No follow-ups due.') + '</p>' +
     '<table><tr><th>Name</th><th>MC / DOT</th><th>Officer</th><th>Email / Phone</th><th>Status</th><th>Follow-up</th><th>Notes</th><th></th></tr>' + rows + '</table>';
@@ -666,6 +691,7 @@ function bSortVal(x, k) {
     case 'safety': return x.safety || '';
     case 'crashes': return x.crashes === '' || x.crashes == null ? '' : Number(x.crashes);
     case 'lead': return x._lead || '';
+    case 'score': return bScore(x);
   }
   return '';
 }
@@ -687,11 +713,13 @@ function bView(lm) {
   });
   return v;
 }
+/* Google Voice: opens the Google Voice dialer with the number filled in (you must be signed in to Google Voice) */
+function gvUrl(p) { var d = String(p || '').replace(/\D/g, ''); if (d.length === 10) d = '1' + d; return 'https://voice.google.com/u/0/calls?a=nc,%2B' + d; }
 function bPhone(x) {
   var p = x.phone || x.cellPhone;
   if (!p) return '—';
   var dg = String(p).replace(/\D/g, ''), full = dg.length === 10 ? '1' + dg : dg;
-  return '<a href="tel:+' + full + '">' + esc(p) + '</a><a class="ib" target="_blank" rel="noopener" href="https://wa.me/' + full + '" title="WhatsApp">💬</a>';
+  return '<a href="tel:+' + full + '">' + esc(p) + '</a><a class="ib" target="_blank" rel="noopener" href="https://wa.me/' + full + '" title="WhatsApp">💬</a><a class="ib" target="_blank" rel="noopener" href="' + gvUrl(p) + '" data-gv="' + esc(p) + '" data-dot="' + esc(x.dot) + '" title="Call with Google Voice">🎙️</a>';
 }
 function bSelUpdate() {
   var n = Object.keys(bSel).length;
@@ -729,7 +757,7 @@ function bRender() {
   if (showIns) cols.push(['ins', 'Insurance']);
   if (showSafe) cols.push(['safety', 'Safety']);
   if (showCr) cols.push(['crashes', 'Crashes']);
-  cols.push(['lead', 'Lead']);
+  cols.push(['score', 'Score']); cols.push(['lead', 'Lead']);
   var k0 = bSort.k || (/mode=mc/.test(bBase) ? 'mc' : '');
   var head = '<th><input type="checkbox" id="bselpage" title="Select this page"></th>' + cols.map(function (cl) {
     return '<th class="s" data-s="' + cl[0] + '">' + cl[1] + (k0 === cl[0] ? (bSort.k ? (bSort.d > 0 ? ' ▲' : ' ▼') : ' ▲') : '') + '</th>';
@@ -750,7 +778,7 @@ function bRender() {
       if (showIns) h2 += '<td>' + (x.ins ? '<span class="au ins-' + (x.ins === 'On File' ? 'On' : x.ins) + '">' + esc(x.ins) + (x.ins === 'On File' && x.insAmt ? ' $' + esc(x.insAmt) + 'K' : '') + '</span>' : '<span class="au au-wait">…</span>') + '</td>';
       if (showSafe) h2 += '<td>' + esc(x.safety || '—') + '</td>';
       if (showCr) h2 += '<td>' + (x.crashes === '' || x.crashes == null ? '—' : esc(x.crashes)) + '</td>';
-      h2 += '<td>' + (x._lead ? '<span class="au ' + (leadCls[x._lead] || 'au-Unknown') + '">' + esc(x._lead) + '</span>' : '—') + '</td></tr>';
+      h2 += '<td>' + bScoreTd(x) + '</td>'; h2 += '<td>' + (x._lead ? '<span class="au ' + (leadCls[x._lead] || 'au-Unknown') + '">' + esc(x._lead) + '</span>' : '—') + '</td></tr>';
       return h2;
     }).join('') + '</tbody></table>' : '';
   if (pages <= 1) { $('pager').innerHTML = ''; }
@@ -1007,7 +1035,9 @@ function eFill(t, x) {
 function openEmail(list) {
   var seen = {}, q = [];
   list.forEach(function (x) { var e = String(x.email || '').trim().toLowerCase(); if (!e || seen[e]) return; seen[e] = 1; q.push(x); });
-  if (!q.length) { alert('No carriers with an email in this selection.'); return; }
+  var lm = bLeadMap(), dup = q.filter(function (x) { var st = lm[x.dot]; return st && st !== 'New'; });
+  if (dup.length && confirm(dup.length + ' carrier(s) are already saved or contacted. OK = skip them, Cancel = include them anyway.')) q = q.filter(function (x) { return dup.indexOf(x) === -1; });
+  if (!q.length) { alert('No carriers left to email (no email, or already contacted).'); return; }
   eQ = q; eIdx = 0;
   var t = getTpl(); $('esub').value = t.subject; $('ebody').value = t.body;
   $('emo').style.display = 'flex'; eRefresh();
@@ -1256,6 +1286,278 @@ $('df').addEventListener('submit', function (e) {
       }).join('');
     })
     .catch(function () { $('dmsg').className = 'err'; $('dmsg').textContent = 'Could not reach the server.'; });
+});
+
+/* ---------------- carrier score ---------------- */
+function bScore(x) {
+  var s = 0, a = String(x.authority || ''), sf = String(x.safety || ''), cr = x.crashes === '' || x.crashes == null ? null : Number(x.crashes), u = Number(x.powerUnits) || 0;
+  if (/active/i.test(a)) s += 30; else if (/pend/i.test(a)) s += 10; else if (/inactive/i.test(a)) s -= 30;
+  if (x.ins === 'On File') s += 25 + (Number(x.insAmt) >= 750 ? 5 : 0); else if (x.ins === 'None') s -= 10;
+  if (/^satis/i.test(sf)) s += 10; else if (/condit|unsat/i.test(sf)) s -= 10;
+  if (cr === 0) s += 15; else if (cr !== null && cr <= 2) s += 8; else if (cr > 5) s -= 5;
+  if (u >= 1 && u <= 5) s += 10; else if (u > 5 && u <= 20) s += 5;
+  if (x.email) s += 5; if (x.phone || x.cellPhone) s += 5;
+  return Math.max(0, Math.min(100, s));
+}
+function bScoreTd(x) { var s = bScore(x); return '<span class="au ' + (s >= 70 ? 'au-Active' : s >= 45 ? 'au-Pending' : 'au-Unknown') + '" title="Authority, insurance, safety, crashes, fleet size, contact info">' + s + '</span>'; }
+
+/* ---------------- saved searches + new carrier alerts ---------------- */
+function ssKey() { return 'ss_' + userKey(); }
+function ssGet() { try { return JSON.parse(localStorage.getItem(ssKey()) || '[]'); } catch (e) { return []; } }
+function ssPut(a) { try { localStorage.setItem(ssKey(), JSON.stringify(a)); } catch (e) {} }
+function ssCur() {
+  var m = $('bmode').value, span = 2;
+  if (m === 'date' && $('dfrom').value && $('dto').value) span = Math.max(1, Math.round((Date.parse($('dto').value) - Date.parse($('dfrom').value)) / 86400000));
+  return { m: m, from: $('bfrom').value, to: $('bto').value, span: span, min: $('bmin').value, max: $('bmax').value, state: $('bstate').value, city: $('bcity').value, auth: $('bauth').value, match: $('bmatch').value, ins: $('bins').value, em: $('bhasemail').checked, ph: $('bhasphone').checked, hide: $('bhide').checked, equip: checked('bequip'), cargo: checked('bcargo') };
+}
+function ssTick(id, v) { var a = v ? v.split('|') : []; Array.prototype.forEach.call($(id).querySelectorAll('input'), function (i) { i.checked = a.indexOf(i.value) !== -1; }); }
+function ssApply(f) {
+  $('bmode').value = f.m; $('bmode').onchange();
+  if (f.m === 'mc') { $('bfrom').value = f.from; $('bto').value = f.to; }
+  else { var t = new Date(); $('dto').value = isoLocal(t); $('dfrom').value = isoLocal(new Date(t.getTime() - f.span * 86400000)); }
+  $('bmin').value = f.min; $('bmax').value = f.max; $('bstate').value = f.state; $('bcity').value = f.city; $('bauth').value = f.auth; $('bmatch').value = f.match; $('bins').value = f.ins;
+  $('bhasemail').checked = f.em; $('bhasphone').checked = f.ph; $('bhide').checked = f.hide; ssTick('bequip', f.equip); ssTick('bcargo', f.cargo);
+  if (typeof cargoLabel === 'function') cargoLabel();
+}
+function ssFill(sel) {
+  $('ssel').innerHTML = '<option value="">Saved searches…</option>' + ssGet().map(function (x) { return '<option' + (x.name === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('');
+  var c = ssGet().filter(function (x) { return x.name === $('ssel').value; })[0]; $('ssalert').checked = !!(c && c.alert);
+}
+function ssRunName(n) { var c = ssGet().filter(function (x) { return x.name === n; })[0]; if (!c) return; if (bLoading) { alert('Wait for the current search to finish.'); return; } ssFill(n); ssApply(c.f); $('bgo').click(); }
+$('ssel').onchange = function () { ssFill($('ssel').value); };
+$('ssrun').onclick = function () { if ($('ssel').value) ssRunName($('ssel').value); };
+$('sssave').onclick = function () {
+  var n = prompt('Name for this search (e.g. Texas box trucks)', $('ssel').value || ''); if (!n) return; n = n.trim();
+  var a = ssGet().filter(function (x) { return x.name !== n; }); a.push({ name: n, f: ssCur(), alert: $('ssalert').checked && $('bmode').value === 'date' }); ssPut(a); ssFill(n); ssCheck();
+};
+$('ssdel').onclick = function () { var n = $('ssel').value; if (!n || !confirm('Delete saved search "' + n + '"?')) return; ssPut(ssGet().filter(function (x) { return x.name !== n; })); ssFill(); ssCheck(); };
+$('ssalert').onchange = function () {
+  var n = $('ssel').value; if (!n) return;
+  var a = ssGet(); a.forEach(function (x) { if (x.name === n) { if ($('ssalert').checked && x.f.m !== 'date') { alert('Alert only works for Date range searches.'); $('ssalert').checked = false; return; } x.alert = $('ssalert').checked; } });
+  ssPut(a); ssCheck();
+};
+function ssUrl(f, from, to) {
+  var e = encodeURIComponent;
+  return '/api/bulk?mode=date&from=' + from + '&to=' + to + '&min=' + e(f.min) + '&max=' + e(f.max) + '&equip=' + e(f.equip) + '&auth=&noauth=1&match=' + f.match + '&cargo=' + e(f.cargo) + '&state=' + e(f.state) + '&city=' + e(f.city) + '&hasemail=' + (f.em ? 1 : 0) + '&hasphone=' + (f.ph ? 1 : 0);
+}
+function ssCheck() {
+  var L = ssGet().filter(function (x) { return x.alert && x.f.m === 'date'; }), box = $('salert');
+  if (!L.length) { box.style.display = 'none'; return; }
+  apiFetch('/api/bulk?mode=latest').then(function (r) { return r.json(); }).then(function (d) {
+    var last = d.latest; if (!/^\d{4}-\d{2}-\d{2}$/.test(last || '')) return;
+    var from = new Date(Date.parse(last + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10), lm = bLeadMap();
+    return Promise.all(L.map(function (x) {
+      return apiFetch(ssUrl(x.f, from, last)).then(function (r) { return r.json(); }).then(function (j) {
+        var n = (j.rows || []).filter(function (c) { return !lm[c.dot]; }).length; return { name: x.name, n: n };
+      }).catch(function () { return { name: x.name, n: -1 }; });
+    })).then(function (res) {
+      box.style.display = 'block';
+      box.innerHTML = '🔔 <b>New carriers (' + from + ' to ' + last + ')</b><br>' + res.map(function (r) {
+        return esc(r.name) + ': ' + (r.n < 0 ? 'check failed' : r.n + (r.n >= 1000 ? '+' : '') + ' new') + ' <button type="button" class="linkbtn" onclick="ssRunName(decodeURIComponent(\'' + encodeURIComponent(r.name).replace(/'/g, '%27') + '\'))">Open</button>';
+      }).join('<br>');
+    });
+  }).catch(function () {});
+}
+var _showApp = showApp;
+showApp = function () { _showApp.apply(this, arguments); ssFill(); setTimeout(ssCheck, 1500); };
+
+/* ---------------- team access (shared leads, admin approval) ---------------- */
+var tOn = false, tMe = null, tPrev = {}, tTimer = null, tPush = null, tPulling = false;
+function tName() { return (tMe && (tMe.name || tMe.email)) || ''; }
+function tSig(x) { return JSON.stringify(x); }
+function tPull() {
+  if (!tOn || tPulling || tPush) return; tPulling = true;
+  sb.from('team_leads').select('dot,data').then(function (r) {
+    tPulling = false; if (r.error || tPush) return;
+    var l = r.data.map(function (x) { return x.data; }); tPrev = {}; l.forEach(function (x) { tPrev[x.dot] = tSig(x); });
+    try { localStorage.setItem(leadsKey(), JSON.stringify(l)); } catch (e) {}
+    renderLeads(); bRender();
+  });
+}
+function tSync() {
+  tPush = null; if (!tOn) return;
+  var l = getLeads().filter(function (x) { return x.dot; }), cur = {}, ups = [], dels = [];
+  l.forEach(function (x) { cur[x.dot] = 1; if (tPrev[x.dot] !== tSig(x)) ups.push({ dot: x.dot, data: x, owner: x.owner || tMe.id, owner_name: x.ownerName || tName(), updated_at: new Date().toISOString() }); });
+  Object.keys(tPrev).forEach(function (d) { if (!cur[d]) dels.push(d); });
+  if (ups.length) sb.from('team_leads').upsert(ups, { onConflict: 'dot' }).then(function (r) { if (r.error) console.error(r.error); else ups.forEach(function (u) { tPrev[u.dot] = tSig(u.data); }); });
+  if (dels.length) sb.from('team_leads').delete().in('dot', dels).then(function (r) { if (r.error) console.error(r.error); else dels.forEach(function (d) { delete tPrev[d]; }); });
+}
+var _setLeads = setLeads;
+setLeads = function (l) {
+  if (tOn) l.forEach(function (x) { if (!x.owner) { x.owner = tMe.id; x.ownerName = tName(); } });
+  _setLeads(l);
+  if (tOn) { clearTimeout(tPush); tPush = setTimeout(tSync, 700); }
+};
+function tFirst() {
+  sb.from('team_leads').select('dot').then(function (r) {
+    if (r.error) { tOn = false; return; }
+    var have = {}; r.data.forEach(function (x) { have[x.dot] = 1; });
+    var up = getLeads().filter(function (x) { return x.dot && !have[x.dot]; }).map(function (x) { x.owner = x.owner || tMe.id; x.ownerName = x.ownerName || tName(); return { dot: x.dot, data: x, owner: tMe.id, owner_name: tName() }; });
+    (up.length ? sb.from('team_leads').upsert(up, { onConflict: 'dot' }) : Promise.resolve({})).then(function () {
+      tPull(); clearInterval(tTimer); tTimer = setInterval(tPull, 60000);
+    });
+  });
+}
+function teamInit() {
+  if (guest || !sb || !session) return;
+  sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle().then(function (r) {
+    if (r.error || !r.data) return; /* team tables not set up: keep working locally */
+    tMe = r.data; planBar();
+    if (!tMe.approved) return; /* customer: own leads, plan limits apply */
+    tOn = true;
+    if (tMe.role === 'admin') { $('navTeam').style.display = ''; $('bassignwrap').style.display = 'inline-block'; sb.from('profiles').select('*').then(function (r2) { if (!r2.error) { tCache = r2.data; bAssignFill(); } }); }
+    tFirst();
+  });
+}
+var tCache = [];
+function tLoad() {
+  sb.from('profiles').select('*').order('created_at').then(function (r) {
+    if (r.error) { $('tlist').innerHTML = '<p class="small err" style="padding:14px">' + esc(r.error.message) + '</p>'; return; }
+    tCache = r.data; tShow();
+  });
+}
+function tShow() {
+  var q = ($('tq').value || '').trim().toLowerCase();
+  var rows = tCache.filter(function (m) { return !q || String(m.email || '').toLowerCase().indexOf(q) !== -1 || String(m.name || '').toLowerCase().indexOf(q) !== -1; });
+  if (!rows.length) { $('tlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email.</p>'; return; }
+  $('tlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
+    var me = m.id === session.user.id, live = m.plan === 'paid' && m.plan_expires && Date.parse(m.plan_expires) > Date.now();
+    var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free';
+    var B = function (t, o) { return '<button type="button" onclick="tSet(\'' + m.id + '\',' + o + ')">' + t + '</button> '; };
+    return '<tr><td>' + esc(m.name || '') + '</td><td>' + esc(m.email || '') + '</td><td>' + (m.approved ? esc(m.role) : 'customer') + '</td><td><span class="au ' + (m.approved || live ? 'au-Active' : 'au-Unknown') + '">' + esc(plan) + '</span></td><td>' +
+      (me ? '(you)' : B(m.approved ? 'Remove from team' : 'Add to team', '{approved:' + !m.approved + '}') + (m.approved ? B(m.role === 'admin' ? 'Make member' : 'Make admin', "{role:'" + (m.role === 'admin' ? 'member' : 'admin') + "'}") : B('✅ +30 days', 'tPlus(\'' + (m.plan_expires || '') + '\')') + B('Set free', "{plan:'free'}"))) + '</td></tr>';
+  }).join('') + '</tbody></table>';
+}
+function tPlus(exp) { var base = Math.max(Date.now(), exp ? Date.parse(exp) : 0); return { plan: 'paid', plan_expires: new Date(base + PLAN.days * 86400000).toISOString() }; }
+function tSet(id, o) { sb.from('profiles').update(o).eq('id', id).then(function (r) { if (r.error) alert(r.error.message); tLoad(); }); }
+var _showView = showView;
+showView = function (v) { _showView(v); if (v === 'team') { tLoad(); tStats(); } if (v === 'pipe') renderPipe(); };
+var _showApp2 = showApp;
+showApp = function () { _showApp2.apply(this, arguments); teamInit(); };
+
+/* ---------------- plans: Free / Paid (30 days) ---------------- */
+var PLAN = { days: 30, price: '', wa: '966596092002' }; /* wa = your WhatsApp number with country code, digits only, e.g. '923001234567'; price is optional */ /* write your price and how to pay here, e.g. price: 'Rs 5000', pay: 'Easypaisa 03xx...' */
+function planInfo() {
+  if (!tMe) return { pro: true, label: '' };
+  if (tMe.approved) return { pro: true, label: 'Team' };
+  var d = tMe.plan_expires ? Math.ceil((Date.parse(tMe.plan_expires) - Date.now()) / 86400000) : 0;
+  if (tMe.plan === 'paid' && d > 0) return { pro: true, label: 'Pro · ' + d + ' days left', d: d };
+  return { pro: false, label: tMe.plan === 'paid' ? 'Plan expired' : 'Free plan' };
+}
+function isPro() { return planInfo().pro; }
+function planBar() {
+  var b = $('planbar'), p = planInfo();
+  if (!tMe || p.label === 'Team') { b.style.display = 'none'; return; }
+  b.style.display = 'flex';
+  b.innerHTML = '<b>' + esc(p.label) + '</b>' + (p.pro ? '' : ' <span class="small">25 carriers per search. No emails, documents, alerts or insurance check.</span>') +
+    (!p.pro || p.d <= 5 ? ' <button type="button" class="go" onclick="upOpen()">⭐ ' + (p.pro ? 'Renew' : 'Upgrade') + '</button>' : '');
+}
+function upOpen() {
+  var em = session && session.user ? session.user.email : '';
+  var msg = encodeURIComponent('Assalamualaikum sir. This is my email: ' + em + ' . Please activate my paid plan.');
+  $('upbody').innerHTML = '<p><b>How to buy the Paid plan</b></p><ol><li>Contact us on WhatsApp to buy the Paid plan' + (PLAN.price ? ' (' + esc(PLAN.price) + ')' : '') + '.</li><li>Give us the email you used to create your account:<br><b>' + esc(em) + '</b></li><li>We activate the Paid plan on that email. It stays active for ' + PLAN.days + ' days and then ends.</li></ol>' +
+    (PLAN.wa ? '<p><a class="go" style="padding:10px 16px;border-radius:10px;display:inline-block;color:#fff" target="_blank" href="https://wa.me/' + esc(PLAN.wa) + '?text=' + msg + '">💬 Contact on WhatsApp</a></p>' : '<p class="small">WhatsApp number is not set yet.</p>');
+  $('upmo').style.display = 'flex';
+}
+['openEmail', 'dOpen', 'dPick'].forEach(function (n) { var f = window[n]; window[n] = function () { if (!isPro()) { upOpen(); return; } return f.apply(this, arguments); }; });
+var _ssCheck = ssCheck; ssCheck = function () { if (isPro()) _ssCheck(); };
+
+/* ---------------- activity log, pipeline, assign, dispatch handoff, team activity ---------------- */
+var lgDot = null, LG_ST = ['New', 'Contacted', 'Interested', 'Onboarded', 'Not interested'];
+function lgMe() { return tMe ? tName() : (session && session.user ? session.user.email : 'me'); }
+function lgLead(l) { return l.filter(function (y) { return y.dot === lgDot; })[0]; }
+function lgAdd(dot, e) {
+  var l = getLeads(), x = l.filter(function (y) { return y.dot === dot; })[0]; if (!x) return;
+  e.t = new Date().toISOString(); e.by = lgMe(); (x.log = x.log || []).push(e);
+  if (e.type !== 'note' && (!x.status || x.status === 'New')) x.status = 'Contacted';
+  setLeads(l);
+}
+function lgSave(fn) { var l = getLeads(), x = lgLead(l); if (!x) return; fn(x); setLeads(l); renderLeads(); lgRender(); }
+function lgCall(o) { lgAdd(lgDot, { type: 'call', out: o }); renderLeads(); lgRender(); }
+function lgOpen(dot) {
+  lgDot = dot; $('lgmo').style.display = 'flex'; lgRender();
+  if (tOn && tMe.role === 'admin' && !tCache.length) sb.from('profiles').select('*').then(function (r) { if (!r.error) { tCache = r.data; lgRender(); } });
+}
+function lgRender() {
+  var x = lgLead(getLeads()); if (!x) return;
+  var ph = String(x.phone || '').replace(/\D/g, ''), B = function (t, f) { return '<button type="button" onclick="' + f + '">' + t + '</button>'; };
+  var mem = tOn && tMe.role === 'admin' ? tCache.filter(function (m) { return m.approved; }) : [];
+  $('lgbody').innerHTML = '<h3>' + esc(x.name) + '</h3><div class="small">MC ' + esc(x.mc || '') + ' · DOT ' + esc(x.dot) + ' · ' + esc(x.address || '') + '</div>' +
+    '<div class="mrow">' + (ph ? '<a class="btnlike go" style="padding:8px 12px;color:#fff" target="_blank" rel="noopener" href="' + gvUrl(x.phone) + '" data-gv="' + esc(x.phone) + '" data-dot="' + esc(x.dot) + '">🎙️ Google Voice call</a><a class="btnlike" style="padding:8px 12px" href="tel:+' + (ph.length === 10 ? '1' + ph : ph) + '">📞 Phone ' + esc(x.phone) + '</a><a class="btnlike" style="padding:8px 12px" target="_blank" href="https://wa.me/' + ph + '">💬 WhatsApp</a>' : '<span class="small">No phone</span>') + '</div>' +
+    '<label class="fl">Call outcome</label><div class="mrow" style="margin-top:0">' + ['Answered', 'Voicemail', 'No answer', 'Hung up', 'Not a trucking company', 'Wrong number'].map(function (o) { return B(o, "lgCall('" + o + "')"); }).join('') + '</div>' +
+    '<div class="mrow">' + B('💬 Text sent', "lgCall('Text sent')").replace("lgCall('Text sent')", "lgAdd(lgDot,{type:'text',out:'Text sent'});lgRender()") + B('✉️ Email sent', "lgAdd(lgDot,{type:'email',out:'Email sent'});lgRender()") + '</div>' +
+    '<div class="mrow"><input id="lgnote" placeholder="Add a note" style="flex:1"><button type="button" onclick="var v=$(\'lgnote\').value.trim();if(v){lgAdd(lgDot,{type:\'note\',out:v});lgRender();}">Add</button></div>' +
+    '<label class="fl">Callback date</label><input type="date" value="' + esc(x.follow || '') + '" onchange="var v=this.value;lgSave(function(y){y.follow=v;})">' +
+    '<label class="fl">Stage</label><select onchange="var v=this.value;lgSave(function(y){y.status=v;})">' + LG_ST.map(function (o) { return '<option' + (o === (x.status || 'New') ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select>' +
+    (mem.length ? '<label class="fl">Assigned to</label><select onchange="lgAssign(this.value)"><option value="">' + esc(x.ownerName || 'Unassigned') + '</option>' + mem.map(function (m) { return '<option value="' + m.id + '">' + esc(m.name || m.email) + '</option>'; }).join('') + '</select>' : (x.ownerName ? '<div class="small" style="margin-top:8px">👤 ' + esc(x.ownerName) + '</div>' : '')) +
+    '<div class="mrow">' + (x.dispatch ? '<span class="au au-Active">With dispatch since ' + esc(x.dispatch.t.slice(0, 10)) + '</span>' : B('➡ Send to dispatch team', "if(confirm('Mark as onboarded and hand over to dispatch?'))lgSave(function(y){y.dispatch={t:new Date().toISOString(),by:lgMe()};y.status='Onboarded';(y.log=y.log||[]).push({type:'note',out:'Sent to dispatch',t:y.dispatch.t,by:lgMe()});})")) + '</div>' +
+    '<h3 style="margin-top:16px">History</h3>' + ((x.log || []).slice(-15).reverse().map(function (g) { return '<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">' + esc(new Date(g.t).toLocaleString()) + ' · ' + esc(g.by || '') + ' · <b>' + esc(g.type) + '</b>: ' + esc(g.out || '') + '</div>'; }).join('') || '<div class="small">No activity yet.</div>');
+}
+function lgAssign(id) {
+  var m = tCache.filter(function (y) { return y.id === id; })[0]; if (!m) return;
+  lgSave(function (y) { y.owner = m.id; y.ownerName = m.name || m.email; });
+}
+function pipeMove(dot, v) { var l = getLeads(), x = l.filter(function (y) { return y.dot === dot; })[0]; if (x) { x.status = v; setLeads(l); renderPipe(); renderLeads(); } }
+function renderPipe() {
+  var l = getLeads().filter(lgMine), today = new Date().toISOString().slice(0, 10);
+  $('pipe').innerHTML = '<div style="display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:10px">' + LG_ST.concat(['With dispatch']).map(function (c) {
+    var it = l.filter(function (x) { return c === 'With dispatch' ? !!x.dispatch : (!x.dispatch && (x.status || 'New') === c); });
+    return '<div style="flex:0 0 250px;background:#e2e8f0;border-radius:14px;padding:10px"><b>' + c + '</b> <span class="bd">' + it.length + '</span>' + it.map(function (x) {
+      var due = x.follow && x.follow <= today && c !== 'Onboarded' && c !== 'Not interested' && c !== 'With dispatch';
+      return '<div class="tc" style="margin:8px 0;padding:10px' + (due ? ';background:#fef9c3' : '') + '"><b>' + esc(x.name) + '</b><div class="small">MC ' + esc(x.mc || '') + ' · ' + esc(x.address || '') + '</div>' + (x.ownerName ? '<div class="small">👤 ' + esc(x.ownerName) + '</div>' : '') + (x.follow ? '<div class="small">📅 ' + esc(x.follow) + (due ? ' · due' : '') + '</div>' : '') +
+        '<div class="acts"><select onchange="pipeMove(\'' + esc(x.dot) + '\',this.value)">' + LG_ST.map(function (o) { return '<option' + (o === (x.status || 'New') ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select><button type="button" onclick="lgOpen(\'' + esc(x.dot) + '\')">📞 Log</button></div></div>';
+    }).join('') + '</div>';
+  }).join('') + '</div>';
+}
+function tStats() {
+  var l = getLeads(), by = {}, today = new Date().toISOString().slice(0, 10), wk = Date.now() - 7 * 86400000;
+  var R = function (n) { return by[n] = by[n] || { leads: 0, onb: 0, c: 0, t: 0, e: 0, c7: 0 }; };
+  l.forEach(function (x) {
+    var o = R(x.ownerName || 'Unassigned'); o.leads++; if (x.status === 'Onboarded' || x.dispatch) o.onb++;
+    (x.log || []).forEach(function (g) {
+      var m = R(g.by || '?'), td = String(g.t).slice(0, 10) === today;
+      if (g.type === 'call') { if (td) m.c++; if (Date.parse(g.t) >= wk) m.c7++; }
+      if (g.type === 'text' && td) m.t++; if (g.type === 'email' && td) m.e++;
+    });
+  });
+  var n = Object.keys(by);
+  $('tstats').innerHTML = n.length ? '<table><thead><tr><th>Member</th><th>Leads</th><th>Onboarded</th><th>Calls today</th><th>Texts today</th><th>Emails today</th><th>Calls 7 days</th></tr></thead><tbody>' + n.map(function (k) { var v = by[k]; return '<tr><td>' + esc(k) + '</td><td>' + v.leads + '</td><td>' + v.onb + '</td><td>' + v.c + '</td><td>' + v.t + '</td><td>' + v.e + '</td><td>' + v.c7 + '</td></tr>'; }).join('') + '</tbody></table>' : '<p class="small" style="padding:14px">No activity yet.</p>';
+}
+var _mkc = markContacted; markContacted = function (x) { _mkc(x); lgAdd(x.dot, { type: 'email', out: 'Email sent' }); };
+
+/* ---------------- members see only their own leads; bulk assign ---------------- */
+function lgMine(x) { return !tOn || !tMe || tMe.role === 'admin' || !x.owner || x.owner === tMe.id; }
+function bAssignFill() {
+  $('bassign').innerHTML = '<option value="">Assign to…</option>' + tCache.filter(function (m) { return m.approved; }).map(function (m) { return '<option value="' + m.id + '">' + esc(m.name || m.email) + '</option>'; }).join('');
+}
+$('bassignbtn').onclick = function () {
+  var id = $('bassign').value, m = tCache.filter(function (y) { return y.id === id; })[0];
+  if (!m) { alert('Choose a team member first.'); return; }
+  var t = bTargets(); if (!t.length) return;
+  var nm = m.name || m.email; if (!confirm('Assign ' + t.length + ' carriers to ' + nm + '?')) return;
+  var l = getLeads(), by = {}; l.forEach(function (x) { by[x.dot] = x; });
+  t.forEach(function (c) {
+    var x = by[c.dot];
+    if (!x) { x = { dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: c.authority || '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New', follow: '', note: '' }; l.push(x); by[c.dot] = x; }
+    x.owner = m.id; x.ownerName = nm;
+  });
+  setLeads(l); renderLeads(); bSel = {}; bRender(); alert(t.length + ' carriers assigned to ' + nm + '.');
+};
+
+/* ---------------- Google Voice dialer extension bridge ---------------- */
+var cdExt = false;
+window.addEventListener('message', function (e) {
+  var d = e.data; if (e.source !== window || !d || d.source !== 'carrierdesk-ext') return;
+  if (d.type === 'ready') cdExt = true;
+  if (d.type === 'dialed' && !d.ok) alert('The dialer extension could not open Google Voice. Check that you are signed in to Google Voice.');
+});
+window.postMessage({ source: 'carrierdesk', type: 'ping' }, '*');
+document.addEventListener('click', function (e) {
+  var a = e.target.closest ? e.target.closest('a[data-gv]') : null; if (!a) return;
+  var num = a.getAttribute('data-gv'), dot = a.getAttribute('data-dot');
+  if (dot) lgAdd(dot, { type: 'call', out: 'Dialed' });
+  if (cdExt) { e.preventDefault(); window.postMessage({ source: 'carrierdesk', type: 'dial', number: num }, '*'); }
+  if (dot) { renderLeads(); if ($('lgmo').style.display === 'flex') lgRender(); }
 });
 
 bRender();
