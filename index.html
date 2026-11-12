@@ -235,6 +235,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
     <form id="fSignup" class="aform" style="display:none">
       <label for="sName">Full name</label><input id="sName" type="text" autocomplete="name" required>
       <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email" required>
+      <label for="sPhone">WhatsApp number</label><input id="sPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="03001234567 or 923001234567" required>
       <label for="sPass">Password (min 6 characters)</label><input id="sPass" type="password" minlength="6" autocomplete="new-password" required>
       <button class="go" type="submit">Create account</button>
     </form>
@@ -463,6 +464,12 @@ function userName() {
 }
 function userKey() { return guest || !session ? 'guest' : session.user.id; }
 function authMsg(t, bad) { $('amsg').textContent = t || ''; $('amsg').style.color = bad ? '#dc2626' : '#15803d'; }
+function cleanPhone(v) {
+  var d = String(v || '').replace(/\D/g, '');
+  if (d.indexOf('00') === 0) d = d.slice(2);
+  if (/^03\d{9}$/.test(d)) d = '92' + d.slice(1); /* Pakistan 03xx... -> 92 3xx... */
+  return d.length >= 10 && d.length <= 15 ? d : '';
+}
 function setTab(t) {
   $('tabLogin').className = t === 'login' ? 'on' : ''; $('tabSignup').className = t === 'signup' ? 'on' : '';
   $('fLogin').style.display = t === 'login' ? 'flex' : 'none'; $('fSignup').style.display = t === 'signup' ? 'flex' : 'none';
@@ -508,10 +515,12 @@ $('fLogin').addEventListener('submit', function (e) {
 $('fSignup').addEventListener('submit', function (e) {
   e.preventDefault();
   if (!sb) { authMsg('Login is not set up yet.', true); return; }
+  var ph = cleanPhone($('sPhone').value);
+  if (!ph) { authMsg('Please enter a valid WhatsApp number, e.g. 03001234567 or 923001234567.', true); return; }
   authMsg('Creating account…');
-  sb.auth.signUp({ email: $('sEmail').value.trim(), password: $('sPass').value, options: { data: { full_name: $('sName').value.trim() } } }).then(function (r) {
+  sb.auth.signUp({ email: $('sEmail').value.trim(), password: $('sPass').value, options: { data: { full_name: $('sName').value.trim(), phone: ph } } }).then(function (r) {
     if (r.error) { authMsg(r.error.message, true); return; }
-    if (!r.data.session) { setTab('login'); authMsg('Account created. Check your email and click the confirmation link, then log in.'); }
+    if (!r.data.session) { setTab('login'); authMsg('Account created. Please log in.'); }
   });
 });
 $('forgot').onclick = function () {
@@ -1023,9 +1032,9 @@ function bGet(off, run, tries) {
         return { ok: r.ok, d: d };
       });
     })
-    .then(function (x) { if (!x.ok) throw new Error(x.d.error || 'Error'); bRetryMsg = ''; return x.d; })
+    .then(function (x) { if (!x.ok) { var er = new Error(x.d.error || 'Error'); if (x.d.upgrade) er.upgrade = true; throw er; } bRetryMsg = ''; return x.d; })
     .catch(function (e) {
-      if (tries < 3 && run === bRun && !bStop) {
+      if (!e.upgrade && tries < 3 && run === bRun && !bStop) {
         var busy = /429|too many|busy|slow|timeout|timed out/i.test(e.message || '');
         var secs = busy ? 4 * (tries + 1) : 1;
         bRetryMsg = busy ? 'Census server is busy, retrying in ' + secs + 's (attempt ' + (tries + 2) + ' of 4)…' : '';
@@ -1125,6 +1134,7 @@ function bStart() {
   bGet(0, run, 0).then(function (d) {
     if (run !== bRun) return;
     bPlain = !!d.plain; bTotal = d.total;
+    if (d.freeUsed != null && tMe) { tMe.free_fetches = d.freeUsed; planBar(); }
     bAddRows(d);
     var ps = d.pageSize || 1000;
     if (d.nextOffset !== null) {
@@ -1136,6 +1146,7 @@ function bStart() {
     if (run !== bRun) return;
     bLoading = false; bRender();
     $('bmsg').className = 'err'; $('bmsg').textContent = e.message || 'Connection problem. Try again.';
+    if (e.upgrade) { if (tMe) { tMe.free_fetches = FREE_FETCHES; planBar(); } upOpen('trial'); }
   });
 }
 function checked(id) {
@@ -1655,13 +1666,29 @@ function tShow2() {
   var q = ($('tmq').value || '').trim().toLowerCase();
   var rows = tCache.filter(function (m) { return !q || String(m.email || '').toLowerCase().indexOf(q) !== -1 || String(m.name || '').toLowerCase().indexOf(q) !== -1; });
   if (!rows.length) { $('tmlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email. (' + tCache.length + ' accounts loaded in total)</p>'; return; }
-  $('tmlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
+  $('tmlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>WhatsApp</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
     var me = m.id === session.user.id, live = m.plan === 'paid' && m.plan_expires && Date.parse(m.plan_expires) > Date.now();
-    var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free';
+    var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free · ' + (parseInt(m.free_fetches, 10) || 0) + '/' + FREE_FETCHES + ' used';
     var B = function (t, o) { return '<button type="button" onclick="tSet(\'' + m.id + '\',' + o + ')">' + t + '</button> '; };
-    return '<tr><td>' + esc(m.name || '') + '</td><td>' + esc(m.email || '') + '</td><td>' + (m.approved ? esc(m.role) : 'customer') + '</td><td><span class="au ' + (m.approved || live ? 'au-Active' : 'au-Unknown') + '">' + esc(plan) + '</span></td><td>' +
+    return '<tr><td>' + esc(m.name || '') + '</td><td>' + esc(m.email || '') + '</td><td>' + tWa(m) + '</td><td>' + (m.approved ? esc(m.role) : 'customer') + '</td><td><span class="au ' + (m.approved || live ? 'au-Active' : 'au-Unknown') + '">' + esc(plan) + '</span></td><td>' +
       (me ? '(you)' : B(m.approved ? 'Remove from team' : 'Add to team', '{approved:' + !m.approved + '}') + (m.approved ? B(m.role === 'admin' ? 'Make member' : 'Make admin', "{role:'" + (m.role === 'admin' ? 'member' : 'admin') + "'}") : B('✅ +30 days', 'tPlus(\'' + (m.plan_expires || '') + '\')') + B('Set free', "{plan:'free'}"))) + '</td></tr>';
   }).join('') + '</tbody></table>';
+}
+function tWaMsg(m) {
+  var n = String(m.name || '').trim().split(/\s+/)[0] || 'sir';
+  var used = parseInt(m.free_fetches, 10) || 0;
+  var body = m.plan === 'paid'
+    ? 'Aap ka Paid plan expire ho gaya hai. Renew kar lein to carrier search, emails, documents aur insurance check dobara chalu ho jayenge.'
+    : used >= FREE_FETCHES
+      ? 'Aap ki ' + FREE_FETCHES + ' free searches khatam ho gayi hain. Paid plan se aap poori carrier list fetch kar sakte hain, aur emails, documents aur insurance check bhi milta hai.'
+      : 'CarrierDesk par account banane ka shukriya! Paid plan mein aap ko poori carrier list, emails, documents aur insurance check milta hai.';
+  return 'Assalamualaikum ' + n + '! Main CarrierDesk team se bol raha hoon. ' + body + (PLAN.price ? ' Plan ki price: ' + PLAN.price + '.' : '') + ' Plan activate karwane ke liye is message ka reply kar dein.';
+}
+function tWa(m) {
+  var d = String(m.phone || '').replace(/\D/g, '');
+  if (!d) return '<span class="small">—</span>';
+  if (m.approved) return esc('+' + d);
+  return '<a href="https://wa.me/' + d + '?text=' + encodeURIComponent(tWaMsg(m)) + '" target="_blank" rel="noopener">💬 +' + esc(d) + '</a>';
 }
 function tPlus(exp) { var base = Math.max(Date.now(), exp ? Date.parse(exp) : 0); return { plan: 'paid', plan_expires: new Date(base + PLAN.days * 86400000).toISOString() }; }
 function tSet(id, o) { sb.from('profiles').update(o).eq('id', id).then(function (r) { if (r.error) alert(r.error.message); tLoad(); }); }
@@ -1671,6 +1698,8 @@ var _showApp2 = showApp;
 showApp = function () { _showApp2.apply(this, arguments); teamInit(); };
 
 /* ---------------- plans: Free / Paid (30 days) ---------------- */
+var FREE_FETCHES = 3; /* free trial: how many carrier fetches (must match FREE_FETCHES on the server, default 3) */
+function trialLeft() { return Math.max(0, FREE_FETCHES - (parseInt(tMe && tMe.free_fetches, 10) || 0)); }
 var PLAN = { days: 30, price: '', wa: '923154524552' }; /* wa = your WhatsApp number with country code, digits only, e.g. '923001234567'; price is optional */ /* write your price and how to pay here, e.g. price: 'Rs 5000', pay: 'Easypaisa 03xx...' */
 function planInfo() {
   if (!tMe) return { pro: true, label: '' };
@@ -1684,13 +1713,13 @@ function planBar() {
   var b = $('planbar'), p = planInfo();
   if (!tMe || p.label === 'Team') { b.style.display = 'none'; return; }
   b.style.display = 'flex';
-  b.innerHTML = '<b>' + esc(p.label) + '</b>' + (p.pro ? '' : ' <span class="small">25 carriers per search. No emails, documents, alerts or insurance check.</span>') +
+  b.innerHTML = '<b>' + esc(p.label) + '</b>' + (p.pro ? '' : ' <span class="small">' + (tMe.plan === 'paid' ? '' : (trialLeft() > 0 ? trialLeft() + ' of ' + FREE_FETCHES + ' free searches left. ' : 'Free trial finished. ')) + '25 carriers per search. No emails, documents, alerts or insurance check.</span>') +
     (!p.pro || p.d <= 5 ? ' <button type="button" class="go" onclick="upOpen()">⭐ ' + (p.pro ? 'Renew' : 'Upgrade') + '</button>' : '');
 }
-function upOpen() {
+function upOpen(reason) {
   var em = session && session.user ? session.user.email : '';
   var msg = encodeURIComponent('Assalamualaikum sir. This is my email: ' + em + ' . Please activate my paid plan.');
-  $('upbody').innerHTML = '<p><b>How to buy the Paid plan</b></p><ol><li>Contact us on WhatsApp to buy the Paid plan' + (PLAN.price ? ' (' + esc(PLAN.price) + ')' : '') + '.</li><li>Give us the email you used to create your account:<br><b>' + esc(em) + '</b></li><li>We activate the Paid plan on that email. It stays active for ' + PLAN.days + ' days and then ends.</li></ol>' +
+  $('upbody').innerHTML = (reason === 'trial' ? '<p style="background:#fef3c7;padding:10px 12px;border-radius:8px"><b>Your free trial (' + FREE_FETCHES + ' searches) is finished.</b> Upgrade to the Paid plan to keep fetching carriers.</p>' : '') + '<p><b>How to buy the Paid plan</b></p><ol><li>Contact us on WhatsApp to buy the Paid plan' + (PLAN.price ? ' (' + esc(PLAN.price) + ')' : '') + '.</li><li>Give us the email you used to create your account:<br><b>' + esc(em) + '</b></li><li>We activate the Paid plan on that email. It stays active for ' + PLAN.days + ' days and then ends.</li></ol>' +
     (PLAN.wa ? '<p><a class="go" style="padding:10px 16px;border-radius:10px;display:inline-block;color:#fff" target="_blank" href="https://wa.me/' + esc(PLAN.wa) + '?text=' + msg + '">💬 Contact on WhatsApp</a></p>' : '<p class="small">WhatsApp number is not set yet.</p>');
   $('upmo').style.display = 'flex';
 }
