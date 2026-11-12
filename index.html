@@ -177,6 +177,10 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
 .cc-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start}
 .cc-chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600;line-height:1.5;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151}
 .cc-st.cc-warn{color:#b45309}.cc-tv.cc-warn{color:#b45309}
+.cc-fl{display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px;margin-bottom:10px}
+.cc-fl b{display:block;font-size:22px;font-weight:800;color:#111827;line-height:1.1}.cc-fl span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280}
+.cc-tbl{width:100%;border-collapse:collapse;font-size:13px}.cc-tbl th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;font-weight:600;text-align:center;padding:8px;background:#f9fafb}
+.cc-tbl td{padding:8px;text-align:center;border-top:1px solid #e5e7eb}.cc-tbl th:first-child,.cc-tbl td:first-child{text-align:left;font-weight:500}
 .cc-flags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.cc-chip.cc-warn{background:#fffbeb;border-color:#fde68a;color:#b45309}
 .cc-chip.cc-ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857}.cc-chip.cc-bad{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
 .cc-st{display:block;background:none;padding:0;font-weight:600;font-size:13.5px;margin-top:6px}.cc-st.cc-ok{color:#047857}.cc-st.cc-bad{color:#b91c1c}
@@ -606,6 +610,14 @@ function ccFlags(c) {
   if (!f.length) return '<div class="cc-flags"><span class="cc-chip cc-ok">✔ No major risk flags</span></div>';
   return '<div class="cc-flags">' + f.map(function (x) { return '<span class="cc-chip cc-' + x[0] + '">' + (x[0] === 'bad' ? '⚠ ' : '') + esc(x[1]) + '</span>'; }).join('') + '</div>';
 }
+function ccFleet(c) {
+  var f = c.fleet, h = '<div class="cc-sec">Fleet</div><div class="cc-fl"><div><b>' + (c.drivers || 0) + '</b><span>Drivers</span></div>' +
+    (f ? '<div><b>' + f.cdl + '</b><span>CDL drivers</span></div>' : '') + '<div><b>' + (c.powerUnits || 0) + '</b><span>Power units</span></div></div>';
+  if (f) h += '<table class="cc-tbl"><tr><th></th><th>Tractors</th><th>Trailers</th><th>Trucks</th></tr>' +
+    '<tr><td>Owned</td><td>' + f.owned.tractors + '</td><td>' + f.owned.trailers + '</td><td>' + f.owned.trucks + '</td></tr>' +
+    '<tr><td>Leased</td><td>' + f.leased.tractors + '</td><td>' + f.leased.trailers + '</td><td>' + f.leased.trucks + '</td></tr></table>';
+  return h;
+}
 function ccMsg(c) {
   var o = String(c.officer1 || '').trim(); if (o.indexOf(',') > -1) o = o.split(',')[1] || '';
   var first = o.trim().split(/\s+/)[0] || '';
@@ -652,7 +664,7 @@ function card(c, idx) {
     ccF('Primary officer', officers) + ccF('Email', mail, 1) + ccF('Phone', tel(c.phone), 1) +
     ccF('Cell phone', tel(c.cellPhone), 1) + ccF('Physical address', map(c.address), 1) + ccF('Mailing address', map(c.mailing), 1) + '</div>' +
     (!c.email && !c.phone && !c.enriching ? '<div class="small" style="margin-top:10px;word-break:break-word">' + esc(c.censusNote || 'No contact data found for this carrier.') + ' <a href="#" onclick="ccRetry(' + idx + ');return false">↻ Retry</a></div>' : '') +
-    '</div><div class="cc-act"><button type="button" onclick="save(' + idx + ')">Save lead</button>' +
+    ccFleet(c) + '</div><div class="cc-act"><button type="button" onclick="save(' + idx + ')">Save lead</button>' +
     (c.phone || c.cellPhone ? '<a class="alt" href="tel:' + esc(String(c.phone || c.cellPhone).replace(/\D/g, '')) + '">📞 Call</a>' : '') +
     (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '?text=' + encodeURIComponent(ccMsg(c) + '\n\nM&H Dispatch Solutions') + '">💬 WhatsApp</a>' : '') +
     '<a class="alt" target="_blank" rel="noopener" href="https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot&query_param=USDOT&query_string=' + encodeURIComponent(c.dot) + '">SAFER ↗</a>' +
