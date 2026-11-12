@@ -11,6 +11,7 @@ const CENSUS = 'https://data.transportation.gov/resource/' + DATASET + '.json';
 const META = 'https://data.transportation.gov/api/views/' + DATASET + '.json';
 const PAGE = 1000;
 const FREE_ROWS = 25;
+const FREE_FETCHES = parseInt(process.env.FREE_FETCHES || '3', 10); // free trial: number of carrier fetches
 
 const CARGO = {
   'General Freight': 'genfreight',
@@ -344,6 +345,26 @@ async function sb(path, opts) {
   return r;
 }
 
+// Free-trial counter (profiles.free_fetches). Fails open if the column is missing.
+async function freeUsed(uid) {
+  try {
+    const r = await sb('profiles?id=eq.' + encodeURIComponent(uid) + '&select=free_fetches');
+    const rows = await r.json();
+    return rows && rows[0] ? (parseInt(rows[0].free_fetches, 10) || 0) : 0;
+  } catch (e) { return 0; }
+}
+async function freeBump(uid, n) {
+  try {
+    const key = SB_KEY();
+    await fetch(SB_URL() + '/rest/v1/profiles?id=eq.' + encodeURIComponent(uid), {
+      method: 'PATCH',
+      headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ free_fetches: n }),
+      signal: AbortSignal.timeout(8000)
+    });
+  } catch (e) { /* ignore */ }
+}
+
 // Builds the filter part of the query (everything except paging)
 function censusFilter(q, mode, f, t, from, to) {
   const p = [];
@@ -491,6 +512,15 @@ module.exports = async (req, res) => {
       order = 'add_date.asc,dot_number.asc';
     }
 
+    // Free trial: only FREE_FETCHES carrier fetches, then the page shows the upgrade popup
+    let freeN = null;
+    if (!isPro && offset === 0) {
+      freeN = await freeUsed(who.id);
+      if (freeN >= FREE_FETCHES) {
+        return res.status(402).json({ error: 'Your free trial is over (' + FREE_FETCHES + ' searches used). Please upgrade to the Paid plan to continue.', upgrade: true, freeUsed: freeN, freeLimit: FREE_FETCHES });
+      }
+    }
+
     const filter = censusFilter(req.query, mode, f, t, from, to);
     const url = 'census?select=' + SELECT + '&' + filter + '&order=' + order + '&limit=' + PAGE + '&offset=' + offset;
     const headers = offset === 0 ? { Prefer: 'count=exact' } : {};
@@ -521,6 +551,8 @@ module.exports = async (req, res) => {
       }
     }
 
+    if (freeN !== null) { freeN++; await freeBump(who.id, freeN); }
+
     let nextOff = raw.length === PAGE ? offset + PAGE : null;
     if (!isPro) {
       outRows = offset > 0 ? [] : outRows.slice(0, FREE_ROWS);
@@ -537,6 +569,8 @@ module.exports = async (req, res) => {
       pageSize: PAGE,
       dropped: drop,
       nextOffset: nextOff,
+      freeUsed: freeN,
+      freeLimit: isPro ? null : FREE_FETCHES,
       warnings: warnings
     });
   } catch (e) {
