@@ -176,6 +176,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
 .cc-h h2{margin:0;font-size:21px;line-height:1.2;letter-spacing:-.01em;color:#111827}
 .cc-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start}
 .cc-chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600;line-height:1.5;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151}
+.cc-flags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.cc-chip.cc-warn{background:#fffbeb;border-color:#fde68a;color:#b45309}
 .cc-chip.cc-ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857}.cc-chip.cc-bad{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
 .cc-st{display:block;background:none;padding:0;font-weight:600;font-size:13.5px;margin-top:6px}.cc-st.cc-ok{color:#047857}.cc-st.cc-bad{color:#b91c1c}
 .cc-b{padding:14px 22px 6px}
@@ -588,6 +589,34 @@ function ccAge(d) {
   if (mo < 0) mo = 0; var y = Math.floor(mo / 12), r = mo % 12;
   return (y ? y + 'y ' : '') + r + 'm';
 }
+function ccFlags(c) {
+  var f = [], n = ins(c), since = ccDate(c.authSince || c.censusAddDate), i = c.insurance || {};
+  if (!c.authorized) f.push(['bad', 'Not authorized to operate']); else if (c.common !== 'Active') f.push(['bad', 'Authority inactive']);
+  if (c.oos) f.push(['bad', 'Out of service']);
+  if (n.bad) f.push(['bad', n.t === 'Not on File' ? 'No insurance on file' : 'Check insurance']);
+  else if (i.bipdRequired && i.bipdOnFile < i.bipdRequired) f.push(['warn', 'Insurance below required']);
+  var sr = String(c.safetyRating || '');
+  if (/^u/i.test(sr)) f.push(['bad', 'Safety: Unsatisfactory']); else if (/^c/i.test(sr)) f.push(['warn', 'Safety: Conditional']);
+  if (since) { var mo = Math.floor((Date.now() - since.getTime()) / 2629800000); if (mo >= 0 && mo < 6) f.push(['warn', 'New carrier (' + mo + ' mo)']); }
+  if (!(c.powerUnits > 0)) f.push(['warn', 'No power units listed']);
+  if (c.crashTotal > 0) f.push(['warn', c.crashTotal + ' crash' + (c.crashTotal > 1 ? 'es' : '') + ' on record']);
+  if (!f.length) return '<div class="cc-flags"><span class="cc-chip cc-ok">✔ No major risk flags</span></div>';
+  return '<div class="cc-flags">' + f.map(function (x) { return '<span class="cc-chip cc-' + x[0] + '">' + (x[0] === 'bad' ? '⚠ ' : '') + esc(x[1]) + '</span>'; }).join('') + '</div>';
+}
+function ccMsg(c) {
+  var o = String(c.officer1 || '').trim(); if (o.indexOf(',') > -1) o = o.split(',')[1] || '';
+  var first = o.trim().split(/\s+/)[0] || '';
+  first = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : 'there';
+  var mc = (c.mc || [])[0];
+  return 'Hi ' + first + ', this is Jax from M&H Dispatch Solutions. I came across ' + c.name + (mc ? ' (' + (/^mc/i.test(mc) ? mc : 'MC' + mc) + ')' : '') +
+    ' and wanted to reach out. We have dedicated dispatchers who find and book freight for carriers. Are you currently looking for loads? Happy to share how we can help.';
+}
+function ccCopy(i, btn) {
+  var t = ccMsg(found[i]);
+  var done = function () { if (btn) { var o = btn.textContent; btn.textContent = '✔ Copied'; setTimeout(function () { btn.textContent = o; }, 1500); } };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { prompt('Copy:', t); });
+  else { prompt('Copy:', t); }
+}
 function ccF(l, v, raw) { return '<div><div class="lbl">' + l + '</div><div class="val">' + (raw ? v : esc(v || '—')) + '</div></div>'; }
 function card(c, idx) {
   var a = c.authorized, n = ins(c), act = c.common === 'Active';
@@ -604,7 +633,7 @@ function card(c, idx) {
     (since ? '<div class="small" style="margin-top:4px">Active for <b>' + ccAge(since) + '</b> · since ' + (since.getMonth() + 1) + '/' + since.getDate() + '/' + since.getFullYear() + '</div>' : '') + '</div>' +
     '<div class="cc-chips"><span class="cc-chip ' + (a ? 'ok' : 'bad') + '">' + (a ? 'Authorized to operate' : 'Not authorized') + '</span>' +
     (c.oos ? '<span class="cc-chip cc-bad">Out of service</span>' : '') + '</div></div>' +
-    '<div class="cc-b"><div class="cc-tiles">' +
+    '<div class="cc-b">' + ccFlags(c) + '<div class="cc-tiles">' +
     '<div><div class="lbl">Insurance</div><div class="cc-tv ' + (n.bad ? 'bad' : 'ok') + '">' + n.t + '</div><div class="small">' + esc(n.s) + '</div></div>' +
     '<div><div class="lbl">Fleet size</div><div class="cc-tv">' + c.powerUnits + ' Power Units</div><div class="small">' + c.drivers + ' Drivers</div></div>' +
     '<div><div class="lbl">Authority</div><div class="cc-tv">' + (act ? 'Active' : 'Inactive') + '</div><div class="small">Contract: ' + esc(c.contract) + ' · Broker: ' + esc(c.broker) + '</div></div></div>' +
@@ -621,8 +650,9 @@ function card(c, idx) {
     (!c.email && !c.phone && !c.enriching ? '<div class="small" style="margin-top:10px;word-break:break-word">' + esc(c.censusNote || 'No contact data found for this carrier.') + ' <a href="#" onclick="ccRetry(' + idx + ');return false">↻ Retry</a></div>' : '') +
     '</div><div class="cc-act"><button type="button" onclick="save(' + idx + ')">Save lead</button>' +
     (c.phone || c.cellPhone ? '<a class="alt" href="tel:' + esc(String(c.phone || c.cellPhone).replace(/\D/g, '')) + '">📞 Call</a>' : '') +
-    (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">💬 WhatsApp</a>' : '') +
-    (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '">✉ Email</a>' : '') + '</div></div>';
+    (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '?text=' + encodeURIComponent(ccMsg(c) + '\n\nM&H Dispatch Solutions') + '">💬 WhatsApp</a>' : '') +
+    (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '?subject=' + encodeURIComponent('Dispatch services for ' + c.name) + '&body=' + encodeURIComponent(ccMsg(c) + '\n\nBest regards,\nJax\nM&H Dispatch Solutions') + '">✉ Email</a>' : '') +
+    '<button type="button" class="alt" onclick="ccCopy(' + idx + ', this)">📋 Copy message</button>' + '</div></div>';
 }
 function ccRender() { $('results').innerHTML = found.map(card).join(''); }
 function ccRetry(i) {
