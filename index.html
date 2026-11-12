@@ -176,6 +176,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
 .cc-h h2{margin:0;font-size:21px;line-height:1.2;letter-spacing:-.01em;color:#111827}
 .cc-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start}
 .cc-chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600;line-height:1.5;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151}
+.cc-st.cc-warn{color:#b45309}.cc-tv.cc-warn{color:#b45309}
 .cc-flags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.cc-chip.cc-warn{background:#fffbeb;border-color:#fde68a;color:#b45309}
 .cc-chip.cc-ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857}.cc-chip.cc-bad{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
 .cc-st{display:block;background:none;padding:0;font-weight:600;font-size:13.5px;margin-top:6px}.cc-st.cc-ok{color:#047857}.cc-st.cc-bad{color:#b91c1c}
@@ -591,9 +592,11 @@ function ccAge(d) {
 }
 function ccFlags(c) {
   var f = [], n = ins(c), since = ccDate(c.authSince || c.censusAddDate), i = c.insurance || {};
-  if (!c.authorized) f.push(['bad', 'Not authorized to operate']); else if (c.common !== 'Active') f.push(['bad', 'Authority inactive']);
+  if (c.authUnverified) f.push(['warn', 'Authority not verified yet']);
+  else if (!c.authorized) f.push(['bad', 'Not authorized to operate']); else if (c.common !== 'Active') f.push(['bad', 'Authority inactive']);
   if (c.oos) f.push(['bad', 'Out of service']);
-  if (n.bad) f.push(['bad', n.t === 'Not on File' ? 'No insurance on file' : 'Check insurance']);
+  if (c.fromCensusOnly && !(i.bipdOnFile > 0)) f.push(['warn', 'Insurance not verified yet']);
+  else if (n.bad) f.push(['bad', n.t === 'Not on File' ? 'No insurance on file' : 'Check insurance']);
   else if (i.bipdRequired && i.bipdOnFile < i.bipdRequired) f.push(['warn', 'Insurance below required']);
   var sr = String(c.safetyRating || '');
   if (/^u/i.test(sr)) f.push(['bad', 'Safety: Unsatisfactory']); else if (/^c/i.test(sr)) f.push(['warn', 'Safety: Conditional']);
@@ -617,6 +620,7 @@ function ccCopy(i, btn) {
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { prompt('Copy:', t); });
   else { prompt('Copy:', t); }
 }
+function ccD(v) { var d = ccDate(v); return d ? (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear() : (v || ''); }
 function ccF(l, v, raw) { return '<div><div class="lbl">' + l + '</div><div class="val">' + (raw ? v : esc(v || '—')) + '</div></div>'; }
 function card(c, idx) {
   var a = c.authorized, n = ins(c), act = c.common === 'Active';
@@ -629,18 +633,18 @@ function card(c, idx) {
   if (wa.length === 10) wa = '1' + wa;
   return '<div class="cc"><div class="cc-h"><div><h2>' + esc(c.name) + '</h2>' +
     (c.legalName && c.legalName !== c.name ? '<div class="sub">Legal name: ' + esc(c.legalName) + '</div>' : '') +
-    '<div class="cc-st ' + (act ? 'cc-ok' : 'cc-bad') + '">' + (act ? '✔' : '✖') + ' Common Authority: ' + esc(c.common) + '</div>' +
+    (c.authUnverified ? '<div class="cc-st cc-warn">⏳ Authority not verified yet (new carrier)</div>' : '<div class="cc-st ' + (act ? 'cc-ok' : 'cc-bad') + '">' + (act ? '✔' : '✖') + ' Common Authority: ' + esc(c.common) + '</div>') +
     (since ? '<div class="small" style="margin-top:4px">Active for <b>' + ccAge(since) + '</b> · since ' + (since.getMonth() + 1) + '/' + since.getDate() + '/' + since.getFullYear() + '</div>' : '') + '</div>' +
-    '<div class="cc-chips"><span class="cc-chip ' + (a ? 'ok' : 'bad') + '">' + (a ? 'Authorized to operate' : 'Not authorized') + '</span>' +
+    '<div class="cc-chips">' + (c.authUnverified ? '<span class="cc-chip cc-warn">Authority not verified</span>' : '<span class="cc-chip ' + (a ? 'cc-ok' : 'cc-bad') + '">' + (a ? 'Authorized to operate' : 'Not authorized') + '</span>') +
     (c.oos ? '<span class="cc-chip cc-bad">Out of service</span>' : '') + '</div></div>' +
     '<div class="cc-b">' + ccFlags(c) + '<div class="cc-tiles">' +
     '<div><div class="lbl">Insurance</div><div class="cc-tv ' + (n.bad ? 'bad' : 'ok') + '">' + n.t + '</div><div class="small">' + esc(n.s) + '</div></div>' +
     '<div><div class="lbl">Fleet size</div><div class="cc-tv">' + c.powerUnits + ' Power Units</div><div class="small">' + c.drivers + ' Drivers</div></div>' +
-    '<div><div class="lbl">Authority</div><div class="cc-tv">' + (act ? 'Active' : 'Inactive') + '</div><div class="small">Contract: ' + esc(c.contract) + ' · Broker: ' + esc(c.broker) + '</div></div></div>' +
+    '<div><div class="lbl">Authority</div><div class="cc-tv">' + (c.authUnverified ? 'Not verified' : act ? 'Active' : 'Inactive') + '</div><div class="small">Contract: ' + esc(c.contract) + ' · Broker: ' + esc(c.broker) + '</div></div></div>' +
     '<div class="cc-sec">Identifiers &amp; classification</div><div class="cc-g">' +
-    ccF('USDOT', c.dot) + ccF('MC docket', (c.mc || []).join(', ')) + ccF('Status', act ? 'Active' : 'Inactive') +
+    ccF('USDOT', c.dot) + ccF('MC docket', (c.mc || []).join(', ')) + ccF('Status', c.authUnverified ? (String(c.statusCode || '').toUpperCase() === 'A' ? 'Active' : '—') : act ? 'Active' : 'Inactive') +
     ccF('Operation class', c.operationClass) + ccF('Carrier operation', c.operation) + ccF('Business org', c.businessOrg) +
-    ccF('MCS-150 date', c.mcs150Date) + ccF('Active since', c.authSince || c.censusAddDate) + ccF('Reported mileage', (c.mileage || '0') + ' mi') +
+    ccF('MCS-150 date', ccD(c.mcs150Date)) + ccF('Active since', ccD(c.authSince || c.censusAddDate)) + ccF('Reported mileage', (c.mileage || '0') + ' mi') +
     ccF('Safety rating', c.safetyRating || 'Not rated') + ccF('Crashes', String(c.crashTotal || 0)) + '</div>' +
     '<div class="cc-sec">Cargo</div><div class="cc-cargo">' +
     ((c.cargo || []).length ? c.cargo.map(function (x) { return '<span class="cc-chip">' + esc(x) + '</span>'; }).join('') : '<span class="small">—</span>') + '</div>' +
@@ -651,6 +655,7 @@ function card(c, idx) {
     '</div><div class="cc-act"><button type="button" onclick="save(' + idx + ')">Save lead</button>' +
     (c.phone || c.cellPhone ? '<a class="alt" href="tel:' + esc(String(c.phone || c.cellPhone).replace(/\D/g, '')) + '">📞 Call</a>' : '') +
     (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '?text=' + encodeURIComponent(ccMsg(c) + '\n\nM&H Dispatch Solutions') + '">💬 WhatsApp</a>' : '') +
+    '<a class="alt" target="_blank" rel="noopener" href="https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot&query_param=USDOT&query_string=' + encodeURIComponent(c.dot) + '">SAFER ↗</a>' +
     (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '?subject=' + encodeURIComponent('Dispatch services for ' + c.name) + '&body=' + encodeURIComponent(ccMsg(c) + '\n\nBest regards,\nJax\nM&H Dispatch Solutions') + '">✉ Email</a>' : '') +
     '<button type="button" class="alt" onclick="ccCopy(' + idx + ', this)">📋 Copy message</button>' + '</div></div>';
 }
