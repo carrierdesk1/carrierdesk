@@ -148,14 +148,16 @@ async function authorityFor(dot, until) {
     if (!dotCol || !statusCol) return null;
     const d = stripZeros(dot);
     const vals = "'" + d + "','" + d.padStart(8, '0') + "'";
-    const rows = await sodaAt(MOTUS, { $select: [dotCol, typeCol, statusCol].filter(Boolean).join(','), $where: dotCol + ' in (' + vals + ')', $limit: 50 }, 5000, 1, until);
+    const amtCols = ['bipd_file', 'min_cov_amount'].filter((k) => keys.indexOf(k) !== -1);
+    const rows = await sodaAt(MOTUS, { $select: [dotCol, typeCol, statusCol].concat(amtCols).filter(Boolean).join(','), $where: dotCol + ' in (' + vals + ')', $limit: 50 }, 5000, 1, until);
     if (!rows.length) return null;
     const stat = (re) => {
       const list = rows.filter((r) => !typeCol || re.test(String(r[typeCol] || '')));
       if (!list.length) return 'None';
       return list.some((r) => !/inactive|revok|cancel|terminat|dismiss|withdraw|expire/i.test(String(r[statusCol] || ''))) ? 'Active' : 'Inactive';
     };
-    return { common: stat(/common|motor|property/i), contract: stat(/contract/i), broker: stat(/broker|forwarder/i) };
+    const thousands = (col) => rows.reduce((mx, r) => { const n = parseFloat(r[col]); return Number.isFinite(n) ? Math.max(mx, Math.round(n / 1000)) : mx; }, 0);
+    return { common: stat(/common|motor carrier/i), contract: stat(/contract/i), broker: stat(/broker|forwarder/i), bipdOnFile: thousands('bipd_file'), minCov: thousands('min_cov_amount') };
   } catch (e) {
     return null;
   }
@@ -208,6 +210,16 @@ const mailingOf = (cs) => {
   return [pick(/street|addr/i), pick(/city/i), pick(/state/i), pick(/zip|postal/i)].filter(Boolean).join(', ');
 };
 
+const fleetOf = (cs) => {
+  if (!cs || !cs.dot_number) return null;
+  const n = (k) => parseInt(cs[k], 10) || 0;
+  return {
+    cdl: n('total_cdl'),
+    owned: { tractors: n('owntract'), trailers: n('owntrail'), trucks: n('owntruck') },
+    leased: { tractors: n('trmtract') + n('trptract'), trailers: n('trmtrail') + n('trptrail'), trucks: n('trmtruck') + n('trptruck') }
+  };
+};
+
 const OPER = { A: 'Interstate', B: 'Intrastate (Hazmat)', C: 'Intrastate (Non-Hazmat)' };
 
 function shape(c, mcList, cs, note) {
@@ -243,6 +255,7 @@ function shape(c, mcList, cs, note) {
     crashTotal: kNum(c.crashTotal),
     cargo: cargoList(cs),
     mailing: mailingOf(cs),
+    fleet: fleetOf(cs),
     censusNote: cs.dot_number ? '' : note || '',
     address: [c.phyStreet, c.phyCity, c.phyState, c.phyZipcode].filter(Boolean).join(', '),
     oos: !!c.oosDate,
@@ -286,6 +299,7 @@ function shapeFromCensus(cs) {
     mileage: cs.mcs150_mileage || '',
     cargo: cargo,
     mailing: mailingOf(cs),
+    fleet: fleetOf(cs),
     safetyRating: '',
     crashTotal: 0,
     address: [cs.phy_street, cs.phy_city, cs.phy_state, cs.phy_zip].filter(Boolean).join(', '),
@@ -412,7 +426,9 @@ module.exports = async (req, res) => {
           shaped.authUnverified = true;
           shaped.authorized = false;
         }
-        if (ins && ins.bipdOnFile > 0) shaped.insurance.bipdOnFile = ins.bipdOnFile;
+        if (au && au.bipdOnFile > 0) shaped.insurance.bipdOnFile = au.bipdOnFile;
+        if (au && au.minCov > 0) shaped.insurance.bipdRequired = au.minCov;
+        if (ins && ins.bipdOnFile > 0 && !(shaped.insurance.bipdOnFile > 0)) shaped.insurance.bipdOnFile = ins.bipdOnFile;
         const payload = { results: [shaped] };
         cacheSet(ck, payload);
         res.setHeader('Cache-Control', 'no-store');
