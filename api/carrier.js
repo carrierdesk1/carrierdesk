@@ -155,7 +155,7 @@ async function authorityFor(dot, until) {
       if (!list.length) return 'None';
       return list.some((r) => !/inactive|revok|cancel|terminat|dismiss|withdraw|expire/i.test(String(r[statusCol] || ''))) ? 'Active' : 'Inactive';
     };
-    return { common: stat(/common/i), contract: stat(/contract/i), broker: stat(/broker|forwarder/i) };
+    return { common: stat(/common|motor|property/i), contract: stat(/contract/i), broker: stat(/broker|forwarder/i) };
   } catch (e) {
     return null;
   }
@@ -186,7 +186,11 @@ async function insuranceFor(mcList, until) {
 const AUTH = { A: 'Active', I: 'Inactive', N: 'None' };
 const authText = (v) => AUTH[v] || (v ? String(v) : 'Unknown');
 const kNum = (v) => Number(String(v == null ? 0 : v).replace(/[^0-9.]/g, '')) || 0;
-const day = (v) => (v ? String(v).slice(0, 10) : '');
+const day = (v) => {
+  const t = String(v || '').trim();
+  if (/^\d{8}$/.test(t)) return t.slice(0, 4) + '-' + t.slice(4, 6) + '-' + t.slice(6, 8);
+  return t.slice(0, 10);
+};
 const fmtPhone = (v) => {
   const d = String(v || '').replace(/\D/g, '');
   return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(v || '');
@@ -198,8 +202,10 @@ const cargoList = (cs) =>
     .filter((k) => /^crgo_/.test(k) && k !== 'crgo_cargoothr_desc' && String(cs[k]).trim())
     .map((k) => CARGO_LBL[k] || k.replace(/^crgo_/, ''));
 const mailingOf = (cs) => {
-  const g = (...ks) => { for (const k of ks) if (cs && cs[k]) return String(cs[k]); return ''; };
-  return [g('mailing_street', 'mail_street', 'mailing_address'), g('mailing_city', 'mail_city'), g('mailing_state', 'mail_state'), g('mailing_zip', 'mail_zip')].filter(Boolean).join(', ');
+  if (!cs) return '';
+  const ks = Object.keys(cs).filter((k) => /(^|_)mail(ing)?(_|$)/i.test(k) && cs[k]);
+  const pick = (re) => { const k = ks.find((x) => re.test(x)); return k ? String(cs[k]).trim() : ''; };
+  return [pick(/street|addr/i), pick(/city/i), pick(/state/i), pick(/zip|postal/i)].filter(Boolean).join(', ');
 };
 
 const OPER = { A: 'Interstate', B: 'Intrastate (Hazmat)', C: 'Intrastate (Non-Hazmat)' };
@@ -302,6 +308,29 @@ module.exports = async (req, res) => {
   if (!key) return res.status(500).json({ error: 'FMCSA_WEBKEY is not set' });
 
   // Diagnostic: /api/carrier?debug=1  (token value is never shown)
+  if (req.query.probe) {
+    const dot = stripZeros(req.query.probe), mc = stripZeros(req.query.mc || '');
+    const out = {};
+    try {
+      const cr = await sodaAt(CENSUS, { $limit: 1, dot_number: dot }, 8000, 2, Date.now() + 9000);
+      const row = cr[0] || {};
+      out.census = { found: !!cr.length, status_code: row.status_code, add_date: row.add_date, mailKeys: Object.keys(row).filter((k) => /mail/i.test(k) && !/^e_?mail/i.test(k)).reduce((o, k) => { o[k] = row[k]; return o; }, {}), allKeys: Object.keys(row) };
+    } catch (e) { out.census = { error: e.message }; }
+    try {
+      const keys = await metaKeys(MOTUS_META);
+      const dotCol = ['usdot_number', 'dot_number'].find((k) => keys.indexOf(k) !== -1);
+      out.motusColumns = keys;
+      out.motusRows = dotCol ? await sodaAt(MOTUS, { $where: dotCol + " in ('" + dot + "','" + dot.padStart(8, '0') + "')", $limit: 10 }, 6000, 1, Date.now() + 7000) : 'no dot column';
+    } catch (e) { out.motusRows = { error: e.message }; }
+    try {
+      const keys = await metaKeys(INS_META);
+      const dockCol = keys.find((k) => /^docket(_number)?$/i.test(k)) || keys.find((k) => /docket/i.test(k));
+      out.insColumns = keys;
+      out.insRows = mc && dockCol ? await sodaAt(INS, { $where: dockCol + " in ('MC" + mc + "','" + mc + "')", $limit: 10 }, 6000, 1, Date.now() + 7000) : 'give &mc=NUMBER';
+    } catch (e) { out.insRows = { error: e.message }; }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json(out);
+  }
   if (String(req.query.debug || '') === '1') {
     const t = cleanToken();
     const probe = async (url, headers) => {
@@ -370,11 +399,18 @@ module.exports = async (req, res) => {
       if (cs) {
         const shaped = shapeFromCensus(cs);
         const [au, ins] = await Promise.all([authorityFor(cs.dot_number, until), insuranceFor(shaped.mc, until)]);
-        if (au) {
+        const anyActive = au && (au.common === 'Active' || au.contract === 'Active' || au.broker === 'Active');
+        const anyInactive = au && (au.common === 'Inactive' || au.contract === 'Inactive' || au.broker === 'Inactive');
+        if (au && (anyActive || anyInactive)) {
           shaped.common = au.common;
           shaped.contract = au.contract;
           shaped.broker = au.broker;
-          shaped.authorized = au.common === 'Active' || au.contract === 'Active' || au.broker === 'Active';
+          shaped.authorized = anyActive;
+        } else {
+          // no authority record found yet (very new carrier): say "not verified", not "not authorized"
+          shaped.common = 'Not verified';
+          shaped.authUnverified = true;
+          shaped.authorized = false;
         }
         if (ins && ins.bipdOnFile > 0) shaped.insurance.bipdOnFile = ins.bipdOnFile;
         const payload = { results: [shaped] };
