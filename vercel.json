@@ -1,6 +1,7 @@
 {
   "regions": ["sfo1"],
   "functions": {
-    "api/bulk.js": { "maxDuration": 60 }
+    "api/bulk.js": { "maxDuration": 60 },
+    "api/ask.js": { "maxDuration": 30 }
   }
 }
