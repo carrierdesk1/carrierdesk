@@ -28,9 +28,10 @@ const INS = 'https://data.transportation.gov/resource/chgs-tx6x.json';
 const INS_META = 'https://data.transportation.gov/api/views/chgs-tx6x.json';
 const cleanToken = () => String(process.env.SOCRATA_APP_TOKEN || '').replace(/["'\s]/g, '');
 let tokenBad = false;
+const UA = { 'User-Agent': 'CarrierDesk/1.0 (carrier lookup tool)', Accept: 'application/json' };
 const tokenHeaders = () => {
   const t = cleanToken();
-  return t && !tokenBad ? { 'X-App-Token': t } : {};
+  return Object.assign({}, UA, t && !tokenBad ? { 'X-App-Token': t } : {});
 };
 const stripZeros = (v) => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
 const metaCache = {};
@@ -303,24 +304,30 @@ module.exports = async (req, res) => {
   // Diagnostic: /api/carrier?debug=1  (token value is never shown)
   if (String(req.query.debug || '') === '1') {
     const t = cleanToken();
-    const probe = async (headers) => {
+    const probe = async (url, headers) => {
       try {
-        const r = await fetch(CENSUS + '?$limit=1&$select=dot_number', { headers, signal: AbortSignal.timeout(8000) });
-        const body = (await r.text()).slice(0, 200);
-        return { status: r.status, body: body };
+        const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+        const body = (await r.text()).slice(0, 120);
+        return { status: r.status, retryAfter: r.headers.get('retry-after'), body: body };
       } catch (e) {
         return { error: String(e && e.message) };
       }
     };
-    const withTok = t ? await probe({ 'X-App-Token': t }) : 'no token set';
-    const noTok = await probe({});
+    const U1 = CENSUS + '?$limit=1&$select=dot_number';
+    const withTok = t ? await probe(U1, Object.assign({}, UA, { 'X-App-Token': t })) : 'no token set';
+    const noTok = await probe(U1, UA);
+    const noUA = await probe(U1, {});
+    const other = await probe(INS + '?$limit=1', UA); // different dataset: tells if the whole site is limiting us
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       tokenSet: !!t,
       tokenLength: t.length,
       tokenMarkedBadInThisInstance: tokenBad,
+      region: process.env.VERCEL_REGION || '',
       withToken: withTok,
-      withoutToken: noTok
+      withoutToken: noTok,
+      withoutUserAgent: noUA,
+      otherDataset: other
     });
   }
 
