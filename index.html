@@ -164,6 +164,7 @@ th.s:hover{background:#16233b}
 .pre{display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle}.pre button{padding:8px 10px;font-size:12px}
 .lt input{min-width:0;width:100%;padding:6px 8px}
 tr.due td{background:#fef9c3!important}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:8px}.pgrid .ps{grid-column:1/-1;font-size:12px;font-weight:800;color:var(--navy2);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--line);padding-top:8px}.pgrid label{font-size:11px;font-weight:600;color:var(--mut);display:block;margin-bottom:2px}.pgrid input,.pgrid select{width:100%;min-width:0;padding:7px 9px;font-size:13px}.pgrid .pw{grid-column:1/-1}.pacc{display:flex;flex-wrap:wrap;gap:4px 12px}.pacc label{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--ink);font-weight:500;margin:0}.pacc input{width:auto;padding:0}@media(max-width:560px){.pgrid{grid-template-columns:1fr}}
 .mo{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 .mbox{background:#fff;border-radius:18px;max-width:780px;width:100%;max-height:92vh;overflow:auto;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
 .mbox h3{margin:0 0 10px}
@@ -431,6 +432,13 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
 <div id="tgate" style="display:none;position:fixed;inset:0;z-index:99;background:#071328;color:#fff;align-items:center;justify-content:center;text-align:center;padding:24px"><div><h2>⏳ Waiting for approval</h2><p>Your account is created. An admin must approve it before you can use CarrierDesk.</p><button type="button" class="go" onclick="$('navLogout').click()">Log out</button></div></div>
 <div class="mo" id="upmo"><div class="mbox"><h3>⭐ Pro plan · 30 days</h3><div id="upbody"></div><div class="mrow"><button type="button" onclick="$('upmo').style.display='none'">Close</button></div></div></div>
 <div class="mo" id="lgmo"><div class="mbox"><div id="lgbody"></div><div class="mrow"><button type="button" onclick="$('lgmo').style.display='none'">Close</button></div></div></div>
+<div class="mo" id="pmo"><div class="mbox" style="max-width:720px">
+<h3>📋 Carrier profile <span class="small" style="font-weight:400">· M&amp;H Dispatch</span></h3>
+<div class="small" id="ptitle"></div>
+<div class="pgrid" id="pform"></div>
+<div class="mrow"><button type="button" class="go" onclick="pfSave(1)">💾 Save</button><button type="button" onclick="pfPrint()">🖨 Print / PDF</button><button type="button" onclick="pfReset()">↺ Reset to FMCSA data</button><button type="button" style="margin-left:auto" onclick="$('pmo').style.display='none'">Close</button></div>
+<div class="small" id="pmsg" style="margin-top:6px"></div>
+</div></div>
 <div class="mo" id="dmo"><div class="mbox">
 <h3>📄 Carrier documents</h3><div class="small" id="dtitle"></div>
 <label class="fl">Your company</label><input type="text" id="dco" value="M&amp;H Dispatch Solutions">
@@ -815,7 +823,7 @@ function card(c, idx) {
     (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '?text=' + encodeURIComponent(ccMsg(c) + '\n\nM&H Dispatch Solutions') + '">💬 WhatsApp</a>' : '') +
     '<a class="alt" target="_blank" rel="noopener" href="https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot&query_param=USDOT&query_string=' + encodeURIComponent(c.dot) + '">SAFER ↗</a>' +
     (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '?subject=' + encodeURIComponent('Dispatch services for ' + c.name) + '&body=' + encodeURIComponent(ccMsg(c) + '\n\nBest regards,\nJax\nM&H Dispatch Solutions') + '">✉ Email</a>' : '') +
-    '<button type="button" class="alt" onclick="ccCopy(' + idx + ', this)">📋 Copy message</button>' + '</div></div>';
+    '<button type="button" class="alt" onclick="ccProf(' + idx + ')">📋 Carrier profile</button>' + '<button type="button" class="alt" onclick="ccCopy(' + idx + ', this)">📋 Copy message</button>' + '</div></div>';
 }
 function ccRender() { $('results').innerHTML = found.map(card).join(''); }
 function ccRetry(i) {
@@ -1522,11 +1530,57 @@ function dMC() {
     [['Carrier', c.name], ['MC number', c.mc], ['USDOT number', c.dot], ['Authority status', c.auth], ['Insurance', c.ins], ['Power units', c.units], ['Safety rating', c.safety], ['Address', c.addr]],
     ['Verify live on FMCSA: https://li-public.fmcsa.dot.gov/LIVIEW/pkg_carrquery.prc_carrlist?n_dotno=' + c.dot]);
 }
-function dProf() {
-  var c = dCur;
-  dPrint('Carrier profile', '<h1>Carrier Profile · ' + esc(c.name) + '</h1><p class="n">Generated ' + dToday() + ' from public FMCSA data.</p>' +
-    dTab([['Company', c.name], ['DBA', c.dba], ['MC / USDOT', c.mc + ' / ' + c.dot], ['Officer', c.officer], ['Phone', c.phone], ['Email', c.email], ['Address', c.addr], ['Power units', c.units], ['Drivers', c.drivers], ['Equipment', c.equip], ['Authority', c.auth], ['Insurance', c.ins], ['Safety rating', c.safety], ['Crashes', c.crashes], ['In census since', c.added]]));
+var PF_TRUCKS = ['Dry Van', 'Reefer', 'Flatbed', 'Step Deck', 'Box Truck', 'Cargo Van', 'Sprinter Van', 'Hotshot', 'Power Only', 'Tanker', 'Other'];
+var PF_ACC = ['Liftgate', 'Pallet jack', 'Straps', 'Load bars', 'E-track', 'Ramps', 'Tarps', 'Chains', 'Blankets', 'Dock-height'];
+var PF_FIELDS = [['name', 'Company'], ['dba', 'DBA'], ['mc', 'MC'], ['dot', 'USDOT'], ['officer', 'Officer'], ['phone', 'Phone'], ['email', 'Email'], ['addr', 'Address'], ['units', 'Power units'], ['drivers', 'Drivers'], ['equip', 'Equipment (FMCSA)'], ['auth', 'Authority'], ['ins', 'Insurance'], ['safety', 'Safety rating'], ['crashes', 'Crashes'], ['added', 'In census since']];
+function pfSt() { try { return JSON.parse(localStorage.getItem('prof_' + userKey()) || '{}'); } catch (e) { return {}; } }
+function pfGet() {
+  var o = {}; PF_FIELDS.forEach(function (f) { o[f[0]] = dCur[f[0]] == null ? '' : String(dCur[f[0]]); });
+  o.truck = ''; o.len = ''; o.wt = ''; o.door = ''; o.acc = []; o.accx = ''; o.sp = ''; o.pct = ($('dfee') && $('dfee').value) || '';
+  var sv = pfSt()[dCur.dot]; if (sv) Object.keys(sv).forEach(function (k) { o[k] = sv[k]; });
+  if (!o.truck) { var e = dCur.equip || ''; o.truck = PF_TRUCKS.filter(function (t) { return t.toLowerCase() === String(e).toLowerCase(); })[0] || ''; }
+  return o;
 }
+function pfIn(k, l, v, cls) { return '<div' + (cls ? ' class="' + cls + '"' : '') + '><label>' + l + '</label><input type="text" data-pf="' + k + '" value="' + esc(v) + '"></div>'; }
+function pfOpen() {
+  var o = pfGet();
+  $('ptitle').textContent = o.name + ' · MC ' + o.mc + ' · DOT ' + o.dot;
+  var h = '<div class="ps">Sales</div>' + pfIn('sp', 'Salesperson name', o.sp) + pfIn('pct', 'Dispatch fee %', o.pct) +
+    '<div class="ps">Truck details</div><div><label>Truck type</label><select data-pf="truck"><option value=""></option>' + PF_TRUCKS.map(function (t) { return '<option' + (t === o.truck ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div>' +
+    pfIn('len', 'Length (e.g. 26 ft)', o.len) + pfIn('wt', 'Weight capacity (e.g. 10,000 lbs)', o.wt) + pfIn('door', 'Door height (e.g. 96 in)', o.door) +
+    '<div class="pw"><label>Accessories</label><div class="pacc" id="pacc">' + PF_ACC.map(function (a) { return '<label><input type="checkbox" value="' + a + '"' + (o.acc.indexOf(a) > -1 ? ' checked' : '') + '> ' + a + '</label>'; }).join('') + '</div></div>' +
+    pfIn('accx', 'Other accessories', o.accx, 'pw') +
+    '<div class="ps">Carrier info (auto-filled, editable)</div>' + PF_FIELDS.map(function (f) { return pfIn(f[0], f[1], o[f[0]]); }).join('');
+  $('pform').innerHTML = h; $('pmsg').textContent = ''; $('pmo').style.display = 'flex';
+}
+function pfRead() {
+  var o = {}; document.querySelectorAll('#pform [data-pf]').forEach(function (e) { o[e.getAttribute('data-pf')] = e.value.trim(); });
+  o.acc = Array.prototype.map.call(document.querySelectorAll('#pacc input:checked'), function (e) { return e.value; }); return o;
+}
+function pfSave(show) {
+  var a = pfSt(); a[dCur.dot] = pfRead();
+  try { localStorage.setItem('prof_' + userKey(), JSON.stringify(a)); if (show) $('pmsg').textContent = '✔ Saved. Next time yehi details auto-fill hongi.'; } catch (e) { if (show) $('pmsg').textContent = 'Save failed (browser storage).'; }
+}
+function pfReset() {
+  var a = pfSt(); delete a[dCur.dot]; try { localStorage.setItem('prof_' + userKey(), JSON.stringify(a)); } catch (e) {} pfOpen(); $('pmsg').textContent = 'Reset ho gaya.';
+}
+function pfPrint() {
+  pfSave(0); var o = pfRead(), acc = o.acc.concat(o.accx ? [o.accx] : []).join(', ');
+  var row = function (a) { return '<tr><td>' + a[0] + '</td><td>' + (esc(a[1]) || '&nbsp;') + '</td></tr>'; };
+  var half = function (r) { return '<table>' + r.map(row).join('') + '</table>'; };
+  var left = [['Company', o.name], ['DBA', o.dba], ['MC / USDOT', o.mc + ' / ' + o.dot], ['Officer', o.officer], ['Phone', o.phone], ['Email', o.email], ['Address', o.addr], ['Authority', o.auth]];
+  var right = [['Power units', o.units], ['Drivers', o.drivers], ['Insurance', o.ins], ['Safety rating', o.safety], ['Crashes', o.crashes], ['In census since', o.added], ['Equipment', o.equip], ['', '']];
+  var truck = [['Truck', o.truck], ['Length', o.len], ['Weight capacity', o.wt], ['Door height', o.door], ['Accessories', acc]];
+  var w = window.open('', '_blank'); if (!w) { alert('Popup allow karein.'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Carrier profile</title><style>@page{margin:12mm}body{font:12px/1.35 Arial,sans-serif;max-width:720px;margin:14px auto;padding:0 14px;color:#111}.h{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #0a1830;padding-bottom:5px}h1{font-size:17px;margin:0}.co{font-weight:800;color:#0a1830;font-size:13px}.sp{margin:6px 0;padding:5px 8px;background:#eef2f8;border-radius:5px;font-weight:700;display:flex;justify-content:space-between}h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:9px 0 3px;color:#0f2a57}.g{display:grid;grid-template-columns:1fr 1fr;gap:10px}table{width:100%;border-collapse:collapse}td{border:1px solid #bbb;padding:3px 6px;vertical-align:top}td:first-child{width:38%;background:#f3f5f9;font-weight:700}.n{color:#666;font-size:10px;margin:3px 0}</style></head><body>' +
+    '<div class="h"><h1>Carrier Profile · ' + esc(o.name) + '</h1><div class="co">M&amp;H Dispatch</div></div>' +
+    '<div class="n">Generated ' + dToday() + ' from public FMCSA data.</div>' +
+    '<div class="sp"><span>Salesperson: ' + (esc(o.sp) || '—') + '</span><span>Dispatch fee: ' + (esc(o.pct) ? esc(o.pct) + '%' : '—') + '</span></div>' +
+    '<h2>Truck details</h2>' + half(truck) + '<h2>Carrier</h2><div class="g">' + half(left) + half(right) + '</div></body></html>');
+  w.document.close(); setTimeout(function () { w.print(); }, 400);
+}
+function dProf() { pfOpen(); }
+function ccProf(i) { var c = found[i]; if (!c) return; var d = dAdapt(c); d.equipment = c.equipment || ''; d.addDate = c.censusAddDate || ''; dCur = dn(d); pfOpen(); }
 
 /* ---------------- documents page (search any MC / DOT) ---------------- */
 var dFound = [];
