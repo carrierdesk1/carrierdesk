@@ -150,7 +150,9 @@ module.exports = async (req, res) => {
       if (oldRows.length) { await sb('census?on_conflict=dot_number', { method: 'POST', headers: hdr, body: JSON.stringify(oldRows) }); updated += oldRows.length; }
     }
 
-    return res.status(200).json({ ok: true, cutoff, pagesRead: pages, reachedCutoff, checked: all.length, added, updated, ms: Date.now() - started });
+    const dates = all.map((x) => x.add_date).filter(Boolean).sort();
+    const withMc = all.filter((x) => x.mc_n).length;
+    return res.status(200).json({ ok: true, newestAddDate: dates[dates.length - 1] || null, oldestAddDate: dates[0] || null, withMc, cutoff, pagesRead: pages, reachedCutoff, checked: all.length, added, updated, ms: Date.now() - started });
   } catch (e) {
     return res.status(502).json({ ok: false, error: e.message || String(e), ms: Date.now() - started });
   }
