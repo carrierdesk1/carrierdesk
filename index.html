@@ -1831,7 +1831,7 @@ function tShow2() {
     var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free · ' + (parseInt(m.free_fetches, 10) || 0) + '/' + FREE_FETCHES + ' used';
     var B = function (t, o) { return '<button type="button" onclick="tSet(\'' + m.id + '\',' + o + ')">' + t + '</button> '; };
     return '<tr><td>' + esc(m.name || '') + '</td><td>' + esc(m.email || '') + '</td><td>' + tWa(m) + '</td><td>' + (m.approved ? esc(m.role) : 'customer') + '</td><td><span class="au ' + (m.approved || live ? 'au-Active' : 'au-Unknown') + '">' + esc(plan) + '</span></td><td>' +
-      (me ? '(you)' : B(m.approved ? 'Remove from team' : 'Add to team', '{approved:' + !m.approved + '}') + (m.approved ? B(m.role === 'admin' ? 'Make member' : 'Make admin', "{role:'" + (m.role === 'admin' ? 'member' : 'admin') + "'}") : B('✅ +30 days', 'tPlus(\'' + (m.plan_expires || '') + '\')') + B('Set free', "{plan:'free'}"))) + '</td></tr>';
+      (me ? '(you)' : B(m.approved ? 'Remove from team' : 'Add to team', '{approved:' + !m.approved + '}') + (m.approved ? B(m.role === 'admin' ? 'Make member' : 'Make admin', "{role:'" + (m.role === 'admin' ? 'member' : 'admin') + "'}") : B('✅ +30 days', 'tPlus(\'' + (m.plan_expires || '') + '\')') + B('Set free', "{plan:'free'}")) + (m.role === 'admin' && m.approved ? '' : '<button type="button" style="color:#dc2626" onclick="tDelUser(\'' + m.id + '\')">🗑 Delete user</button>')) + '</td></tr>';
   }).join('') + '</tbody></table>';
 }
 function tWaMsg(m) {
@@ -2137,6 +2137,22 @@ $('iWa').onclick = function () {
     w.appendChild(b);
   });
 })();
+
+/* admin: delete a user and all their data */
+function tDelUser(id) {
+  var m = (tCache || []).filter(function (x) { return x.id === id; })[0] || {};
+  var label = (m.name || 'this user') + ' (' + (m.email || id) + ')';
+  if (!confirm('Delete ' + label + ' and ALL their data?\nThis cannot be undone.')) return;
+  if (prompt('Type DELETE to confirm removing ' + label) !== 'DELETE') return;
+  fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify({ action: 'delete_user', userId: id }) })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (x) {
+      if (!x.ok) { alert(x.j.error || 'Delete failed.'); return; }
+      tCache = (tCache || []).filter(function (y) { return y.id !== id; });
+      tShow(); tLoad();
+      alert('User deleted.' + (x.j.failed && x.j.failed.length ? ' (Some data could not be removed: ' + x.j.failed.join(', ') + ')' : ''));
+    }).catch(function (e) { alert(e.message); });
+}
 </script>
 </body>
 </html>
