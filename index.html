@@ -257,9 +257,11 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
       <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email" required>
       <label for="sPhone">WhatsApp number</label><input id="sPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="03001234567 or 923001234567" required>
       <label for="sPass">Password (min 6 characters)</label><input id="sPass" type="password" minlength="6" autocomplete="new-password" required>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:13px;margin-top:4px"><input id="sAgree" type="checkbox" required style="flex:none;min-width:0;width:auto;padding:0;margin-top:3px"><span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
       <button class="go" type="submit">Create account</button>
     </form>
     <div id="amsg"></div>
+    <p class="small" style="text-align:center;margin:14px 0 0"><a href="/terms" target="_blank" rel="noopener">Terms</a> · <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></p>
   </div>
 </div>
 
@@ -280,6 +282,7 @@ a.btnlike{border:1px solid var(--line);border-radius:10px;background:#fff;font-w
     </nav>
     <div class="sp"></div>
     <div id="helpbox" style="display:none"><b>Need Help?</b><p>Our team is here to help!</p><a id="helplink" href="#">Contact Support</a></div>
+    <div style="padding:10px 18px 16px;font-size:12px"><a href="/terms" target="_blank" rel="noopener" style="color:#94a3b8">Terms</a> <span style="color:#64748b">·</span> <a href="/privacy" target="_blank" rel="noopener" style="color:#94a3b8">Privacy</a></div>
   </aside>
 
   <div class="content">
@@ -1627,11 +1630,14 @@ showApp = function () { _showApp.apply(this, arguments); ssFill(); setTimeout(ss
 
 /* ---------------- team access (shared leads, admin approval) ---------------- */
 var tOn = false, tMe = null, tPrev = {}, tTimer = null, tPush = null, tPulling = false;
+var cOn = false; /* customer cloud sync: own leads in Supabase table user_leads (non-team accounts) */
+function lgTable() { return cOn ? 'user_leads' : 'team_leads'; }
+function lgSel(cols) { var q = sb.from(lgTable()).select(cols); return cOn ? q.eq('user_id', session.user.id) : q; }
 function tName() { return (tMe && (tMe.name || tMe.email)) || ''; }
 function tSig(x) { return JSON.stringify(x); }
 function tPull() {
-  if (!tOn || tPulling || tPush) return; tPulling = true;
-  sb.from('team_leads').select('dot,data').then(function (r) {
+  if ((!tOn && !cOn) || tPulling || tPush) return; tPulling = true;
+  lgSel('dot,data').then(function (r) {
     tPulling = false; if (r.error || tPush) return;
     var l = r.data.map(function (x) { return x.data; }); tPrev = {}; l.forEach(function (x) { tPrev[x.dot] = tSig(x); });
     try { localStorage.setItem(leadsKey(), JSON.stringify(l)); } catch (e) {}
@@ -1639,35 +1645,43 @@ function tPull() {
   });
 }
 function tSync() {
-  tPush = null; if (!tOn) return;
+  tPush = null; if (!tOn && !cOn) return;
   var l = getLeads().filter(function (x) { return x.dot; }), cur = {}, ups = [], dels = [];
-  l.forEach(function (x) { cur[x.dot] = 1; if (tPrev[x.dot] !== tSig(x)) ups.push({ dot: x.dot, data: x, owner: x.owner || tMe.id, owner_name: x.ownerName || tName(), updated_at: new Date().toISOString() }); });
+  l.forEach(function (x) { cur[x.dot] = 1; if (tPrev[x.dot] !== tSig(x)) ups.push(cOn ? { user_id: session.user.id, dot: x.dot, data: x, updated_at: new Date().toISOString() } : { dot: x.dot, data: x, owner: x.owner || tMe.id, owner_name: x.ownerName || tName(), updated_at: new Date().toISOString() }); });
   Object.keys(tPrev).forEach(function (d) { if (!cur[d]) dels.push(d); });
-  if (ups.length) sb.from('team_leads').upsert(ups, { onConflict: 'dot' }).then(function (r) { if (r.error) console.error(r.error); else ups.forEach(function (u) { tPrev[u.dot] = tSig(u.data); }); });
-  if (dels.length) sb.from('team_leads').delete().in('dot', dels).then(function (r) { if (r.error) console.error(r.error); else dels.forEach(function (d) { delete tPrev[d]; }); });
+  if (ups.length) sb.from(lgTable()).upsert(ups, { onConflict: cOn ? 'user_id,dot' : 'dot' }).then(function (r) { if (r.error) console.error(r.error); else ups.forEach(function (u) { tPrev[u.dot] = tSig(u.data); }); });
+  if (dels.length) (cOn ? sb.from(lgTable()).delete().eq('user_id', session.user.id) : sb.from(lgTable()).delete()).in('dot', dels).then(function (r) { if (r.error) console.error(r.error); else dels.forEach(function (d) { delete tPrev[d]; }); });
 }
 var _setLeads = setLeads;
 setLeads = function (l) {
   if (tOn) l.forEach(function (x) { if (!x.owner) { x.owner = tMe.id; x.ownerName = tName(); } });
   _setLeads(l);
-  if (tOn) { clearTimeout(tPush); tPush = setTimeout(tSync, 700); }
+  if (tOn || cOn) { clearTimeout(tPush); tPush = setTimeout(tSync, 700); }
 };
 function tFirst() {
-  sb.from('team_leads').select('dot').then(function (r) {
-    if (r.error) { tOn = false; return; }
+  /* first sync: upload local leads the cloud does not have yet (so old browser-only leads are rescued), then pull */
+  lgSel('dot').then(function (r) {
+    if (r.error) { tOn = false; cOn = false; return; } /* table missing: keep working locally */
     var have = {}; r.data.forEach(function (x) { have[x.dot] = 1; });
-    var up = getLeads().filter(function (x) { return x.dot && !have[x.dot]; }).map(function (x) { x.owner = x.owner || tMe.id; x.ownerName = x.ownerName || tName(); return { dot: x.dot, data: x, owner: tMe.id, owner_name: tName() }; });
-    (up.length ? sb.from('team_leads').upsert(up, { onConflict: 'dot' }) : Promise.resolve({})).then(function () {
+    var up = getLeads().filter(function (x) { return x.dot && !have[x.dot]; }).map(function (x) {
+      if (cOn) return { user_id: session.user.id, dot: x.dot, data: x };
+      x.owner = x.owner || tMe.id; x.ownerName = x.ownerName || tName();
+      return { dot: x.dot, data: x, owner: tMe.id, owner_name: tName() };
+    });
+    (up.length ? sb.from(lgTable()).upsert(up, { onConflict: cOn ? 'user_id,dot' : 'dot' }) : Promise.resolve({})).then(function (r2) {
+      /* customer: if the upload failed do NOT pull, it would overwrite the local leads */
+      if (cOn && r2 && r2.error) { console.error(r2.error); cOn = false; return; }
       tPull(); clearInterval(tTimer); tTimer = setInterval(tPull, 60000);
     });
   });
 }
 function teamInit() {
+  tOn = false; cOn = false; tPrev = {}; clearInterval(tTimer); clearTimeout(tPush); tPush = null; /* fresh start per login */
   if (guest || !sb || !session) return;
   sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle().then(function (r) {
     if (r.error || !r.data) return; /* team tables not set up: keep working locally */
     tMe = r.data; planBar();
-    if (!tMe.approved) return; /* customer: own leads, plan limits apply */
+    if (!tMe.approved) { cOn = true; tFirst(); return; } /* customer: own leads saved in Supabase (user_leads), plan limits apply */
     tOn = true;
     if (tMe.role === 'admin') { $('navTeam').style.display = ''; $('bassignwrap').style.display = 'inline-block'; sb.from('profiles').select('*').then(function (r2) { if (!r2.error) { tCache = r2.data; bAssignFill(); } }); }
     tFirst();
