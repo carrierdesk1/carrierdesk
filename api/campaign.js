@@ -2,7 +2,7 @@
 // actions: verify, skip_list, skip_add, skip_del, create, send, list, detail, mark_replied, pause, resume, delete,
 //          sender_get, sender_save, issue
 // Cron:    GET /api/campaign?cron=1   (daily, sends due follow-ups; Authorization: Bearer CRON_SECRET)
-const { sb, getUser, verifyList, sendRows } = require('../lib/mail');
+const { sb, getUser, verifyList, sendRows } = require('./_mail');
 
 const DAILY = () => parseInt(process.env.SEND_DAILY_LIMIT || '300', 10); // emails per user per day
 const BATCH = 100;                                                         // emails per "send" call
