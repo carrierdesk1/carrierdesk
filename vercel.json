@@ -1,15 +1,35 @@
 {
-  "regions": ["sfo1"],
+  "regions": [
+    "sfo1"
+  ],
   "functions": {
-    "api/bulk.js": { "maxDuration": 60 },
-    "api/ask.js": { "maxDuration": 30 },
-    "api/refresh-census.js": { "maxDuration": 60 }
+    "api/bulk.js": {
+      "maxDuration": 60
+    },
+    "api/ask.js": {
+      "maxDuration": 30
+    },
+    "api/refresh-census.js": {
+      "maxDuration": 60
+    },
+    "api/campaign.js": {
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/terms", "destination": "/terms.html" },
-    { "source": "/privacy", "destination": "/privacy.html" }
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    }
   ],
   "crons": [
-    { "path": "/api/refresh-census", "schedule": "0 7 * * *" }
+    {
+      "path": "/api/refresh-census",
+      "schedule": "0 7 * * *"
+    }
   ]
 }
