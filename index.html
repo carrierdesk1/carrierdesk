@@ -505,6 +505,22 @@ a.pl-wa:hover{background:#15803d;text-decoration:none}
 .pl-card li.no{color:#a1a1aa;text-decoration:line-through}.pl-card li.no::before{content:"–";color:#a1a1aa}
 .pl-card li.soon{color:#8a8f98}.pl-card li.soon::before{content:"○";color:#b9bcc4}.pl-card li.soon::after{content:"Soon";margin-left:6px;font-size:10px;font-weight:800;background:#f1f1f3;color:#6b7280;border-radius:99px;padding:1px 7px}
 .side nav a[data-lock]{opacity:.6}.lk{margin-left:auto;display:inline-flex}.lk .cdi svg{width:14px;height:14px}
+
+/* plan popup in site theme */
+#upmo .mbox{border-top:5px solid #d91f26;background:#fff}
+#upmo h3{font-size:22px;margin:0 0 12px;color:#14161c}
+.pl-card{cursor:pointer;border:2px solid var(--line);transition:transform .2s,box-shadow .2s,background .2s,border-color .2s}
+.pl-card.pop{background:#fff;border:2px solid var(--line)}
+.pl-card.sel{background:#fff1f1;border-color:#e0252c;box-shadow:0 14px 30px rgba(217,31,38,.2);transform:translateY(-3px)}
+.pl-card.sel .pl-price b{color:#b3121a}
+a.pl-wa{background:linear-gradient(135deg,#e0252c,#b3121a);box-shadow:0 8px 16px rgba(179,18,26,.3);color:#fff}
+a.pl-wa:hover{background:linear-gradient(135deg,#c81e25,#96101a)}
+.pl-cur{border-color:#d91f26;color:#b3121a;margin-bottom:8px}
+.pl-more{margin-top:auto;padding-top:16px;text-align:center}
+.pl-more span{display:block;font-size:12px;color:var(--mut);margin-bottom:6px}
+a.pl-ct{display:block;border:1.5px solid #d91f26;color:#d91f26;background:#fff;border-radius:11px;padding:10px;font-weight:700;text-decoration:none}
+a.pl-ct:hover{background:#fff1f1;text-decoration:none}
+.pl-card ul{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -2916,7 +2932,8 @@ function tierFeats(t) {
     '<li>' + (t.leads === Infinity ? 'Unlimited saved leads' : 'Up to ' + nf(t.leads) + ' saved leads') + '</li>'].concat(t.feats.map(function (f) { return f.charAt(0) === '~' ? '<li class="soon">' + f.slice(1) + '</li>' : '<li>' + f + '</li>'; })).join('');
 }
 upOpen = function (reason) {
-  var em = session && session.user ? session.user.email : '', cur = planInfo(), me = cur.tier ? cur.tier.key : '';
+  var em = session && session.user ? session.user.email : '', cur = planInfo(), me = cur.tier ? cur.tier.key : '', selKey;
+  selKey = PLAN_TIERS.some(function (t) { return t.key === me; }) ? me : 'standard';
   var T = planTier(), notes = {
     trial: '<b>Your free trial (' + FREE_FETCHES + ' searches) is finished.</b> Choose a plan to keep fetching carriers.',
     expired: '<b>Your plan has expired.</b> Choose a plan to continue.',
@@ -2934,15 +2951,17 @@ upOpen = function (reason) {
   $('upbody').innerHTML = (notes[reason] ? '<div class="pl-note">' + notes[reason] + '</div>' : '') +
     '<div class="pl-grid">' + PLAN_TIERS.map(function (t) {
       var msg = encodeURIComponent('Assalamualaikum sir. This is my email: ' + em + ' . Please activate the ' + t.name + ' plan ($' + t.price + '/month) on CarrierDesk.');
-      return '<div class="pl-card' + (t.pop ? ' pop' : '') + '">' + (t.pop ? '<span class="pl-pop">Popular</span>' : '') +
+      return '<div class="pl-card' + (t.pop ? ' pop' : '') + (t.key === selKey ? ' sel' : '') + '" onclick="plSel(this)">' + (t.pop ? '<span class="pl-pop">Popular</span>' : '') +
         '<div class="pl-tag">' + t.tag + '</div><h4>' + t.name + '</h4><p class="pl-d">' + t.desc + '</p>' +
         '<div class="pl-price"><b>$' + t.price + '</b> <span>/month</span></div>' +
         (me === t.key ? '<span class="pl-cur">Current plan</span>' : '') +
-        (PLAN.wa ? '<a class="pl-wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(PLAN.wa) + '?text=' + msg + '">' + (me === t.key ? 'Renew on WhatsApp' : 'WhatsApp') + '</a>' : '') +
-        '<ul>' + tierFeats(t) + '</ul></div>';
+        (PLAN.wa ? '<a class="pl-wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(PLAN.wa) + '?text=' + msg + '">' + (me === t.key ? '💬 Renew on WhatsApp' : '💬 WhatsApp') + '</a>' : '') +
+        '<ul>' + tierFeats(t) + '</ul>' + (PLAN.wa ? '<div class="pl-more"><span>For more details</span><a class="pl-ct" target="_blank" rel="noopener" href="https://wa.me/' + esc(PLAN.wa) + '?text=' + encodeURIComponent('Assalamualaikum sir. I want more details about the ' + t.name + ' plan on CarrierDesk. My email: ' + em) + '">💬 Contact on WhatsApp</a></div>' : '') + '</div>';
     }).join('') + '</div><p class="small" style="margin:12px 0 0">Prices are per month (' + PLAN.days + ' days). Message us on WhatsApp with the email of your account (<b>' + esc(em) + '</b>); we activate the plan on that email after payment.</p>';
+  var cb = $('upmo').querySelector('.mrow button'); if (cb) cb.className = 'go';
   $('upmo').style.display = 'flex';
 };
+function plSel(el) { Array.prototype.forEach.call(document.querySelectorAll('.pl-card'), function (c) { c.classList.remove('sel'); }); el.classList.add('sel'); }
 /* show the plans automatically once per session when the free trial / plan is over */
 function navLocks() {
   var T = planTier();
