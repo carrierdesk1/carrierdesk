@@ -272,6 +272,19 @@ html.dark .umenu button:hover{background:#1b2a49}
 .pw input{width:100%;padding-right:46px}
 .pwb{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0!important;background:transparent!important;padding:6px 8px;color:#64748b;cursor:pointer;line-height:0;border-radius:8px}
 .pwb:hover{color:var(--acc)}
+/* ---- daily targets ---- */
+#tgStrip{display:none;margin:10px 28px 60px;gap:22px;align-items:center;flex-wrap:wrap;background:#fff;border-radius:12px;padding:10px 16px;box-shadow:0 2px 10px rgba(15,23,42,.08)}
+html.dark #tgStrip{background:#111c33}
+#tgStrip .tgt{font-weight:800;font-size:14px}
+#tgStrip .tgi{flex:1;min-width:200px}
+#tgStrip .tgl{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+#tgStrip .tgb{height:9px;border-radius:9px;background:#e2e8f0;overflow:hidden}
+html.dark #tgStrip .tgb{background:#243049}
+#tgStrip .tgb i{display:block;height:100%;background:#2a74f5;border-radius:9px;transition:width .4s}
+#tgStrip .tgb i.ok{background:#16a34a}
+.tgn{width:84px;padding:7px 8px}
+.tgc{text-align:center;white-space:nowrap}
+.tgy{color:#16a34a;font-weight:700}.tgx{color:#dc2626;font-weight:700}.tgo{color:#94a3b8}
 </style>
 </head>
 <body>
@@ -341,6 +354,8 @@ html.dark .umenu button:hover{background:#1b2a49}
       </div>
     </header>
     <div id="planbar" style="display:none;margin:10px 28px 0;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border-radius:12px;padding:8px 14px;box-shadow:0 2px 10px rgba(15,23,42,.08)"></div>
+
+    <div id="tgStrip"></div>
 
     <!-- Dashboard -->
     <section id="viewDash" class="pad">
@@ -455,6 +470,13 @@ html.dark .umenu button:hover{background:#1b2a49}
 <section id="viewTeam" class="pad" style="display:none;margin-top:24px">
       <h3>Team activity</h3>
       <div class="bw" style="margin-bottom:18px"><div id="tstats"></div></div>
+      <h3 style="margin-top:6px">Daily targets</h3>
+      <div class="notice">Every team member gets a daily target. Their progress fills in automatically when they email or call carriers in CarrierDesk. The day follows Pakistan time. Members without a custom target use the default (100 emails + 100 calls).</div>
+      <div class="cdrow"><input id="tgAllE" class="tgn" type="number" min="0" placeholder="Emails"><input id="tgAllC" class="tgn" type="number" min="0" placeholder="Calls"><button type="button" class="btn-o" id="tgAllBtn">Apply to all members</button><span id="tgMsg" class="small"></span></div>
+      <div class="bw" style="margin-bottom:18px"><div id="tgTable"></div></div>
+      <div class="cdrow"><b>Weekly report</b><select id="tgWk"><option value="0">This week</option><option value="-1">Last week</option><option value="-2">2 weeks ago</option></select><button type="button" class="go" id="tgRep">Show report</button><button type="button" class="btn-g" id="tgCsv" style="display:none">Download CSV</button></div>
+      <p class="small" style="margin:0 0 6px">Mon–Sat. A day counts when the member reaches both the email and call target. Only finished days count in the verdict (today shows as in progress).</p>
+      <div class="bw" style="margin-bottom:18px"><div id="tgReport"></div></div>
       <h3>Team</h3>
       <div class="notice">Team members share one list of leads and have full access. Other signups are customers on the Free plan; search their email below and press +30 days after you receive their payment.</div>
       <div style="display:flex;gap:8px;margin-bottom:10px"><input id="tmq" placeholder="Search customer by email or name" oninput="tShow()" onkeydown="if(event.key==='Enter')tLoad()" style="flex:1"><button type="button" onclick="tLoad()">🔍 Search</button><button type="button" onclick="$('tmq').value='';tLoad()">↻ Refresh</button></div>
@@ -2145,14 +2167,111 @@ function tDelUser(id) {
   if (!confirm('Delete ' + label + ' and ALL their data?\nThis cannot be undone.')) return;
   if (prompt('Type DELETE to confirm removing ' + label) !== 'DELETE') return;
   fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify({ action: 'delete_user', userId: id }) })
-    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, s: r.status, j: j }; }); })
     .then(function (x) {
-      if (!x.ok) { alert(x.j.error || 'Delete failed.'); return; }
+      if (!x.ok) { alert(x.j.error || ('Delete failed (HTTP ' + x.s + (x.s === 404 ? ': api/admin.js is not deployed yet' : x.s >= 500 ? ': server crashed, check Vercel Logs' : '') + ').')); return; }
       tCache = (tCache || []).filter(function (y) { return y.id !== id; });
       tShow(); tLoad();
       alert('User deleted.' + (x.j.failed && x.j.failed.length ? ' (Some data could not be removed: ' + x.j.failed.join(', ') + ')' : ''));
     }).catch(function (e) { alert(e.message); });
 }
+
+/* ================= daily targets ================= */
+var tgState = null, tgUid = null, tgRepData = null;
+function tgApi(action, data) {
+  if (guest || !session) return Promise.reject(new Error('Please log in first.'));
+  return fetch('/api/targets', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify(Object.assign({ action: action }, data || {})) })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Error ' + r.status)); return j; }); });
+}
+function tgPct(d, t) { return t > 0 ? Math.min(100, Math.round(d * 100 / t)) : 100; }
+function tgDraw() {
+  var el = $('tgStrip');
+  if (!tgState || !tgState.show) { el.style.display = 'none'; return; }
+  var bar = function (label, o) { var ok = o.done >= o.target; return '<div class="tgi"><div class="tgl"><b>' + label + '</b><span>' + o.done + ' / ' + o.target + (ok ? ' ✅' : '') + '</span></div><div class="tgb"><i class="' + (ok ? 'ok' : '') + '" style="width:' + tgPct(o.done, o.target) + '%"></i></div></div>'; };
+  el.innerHTML = '<div class="tgt">🎯 Today\'s target</div>' + bar('📧 Emails', tgState.emails) + bar('📞 Calls', tgState.calls);
+  el.style.display = 'flex';
+}
+function tgPopup() {
+  if (!tgState || !tgState.show) return;
+  var key = 'cd_tgmsg_' + tgUid + '_' + tgState.day;
+  try { if (localStorage.getItem(key)) return; } catch (e) {}
+  var mo = $('tgmo');
+  if (!mo) { mo = document.createElement('div'); mo.className = 'mo'; mo.id = 'tgmo'; document.body.appendChild(mo); }
+  mo.innerHTML = '<div class="mbox" style="max-width:420px;text-align:center"><div style="font-size:42px">🎯</div><h3 style="margin:6px 0">Good day, ' + esc((tgState.name || '').split(' ')[0] || 'team') + '!</h3>' +
+    '<p style="margin:0 0 10px">Your target for today:</p><p style="font-size:20px;font-weight:800;margin:0 0 6px">📧 ' + tgState.emails.target + ' emails</p><p style="font-size:20px;font-weight:800;margin:0 0 12px">📞 ' + tgState.calls.target + ' calls</p>' +
+    '<p class="small">Progress is counted automatically when you email or call carriers from CarrierDesk.<br>Current: ' + tgState.emails.done + ' / ' + tgState.emails.target + ' emails · ' + tgState.calls.done + ' / ' + tgState.calls.target + ' calls</p>' +
+    '<button type="button" class="go" id="tgOk" style="margin-top:8px">Let\'s go</button></div>';
+  mo.style.display = 'flex';
+  $('tgOk').onclick = function () { mo.style.display = 'none'; try { localStorage.setItem(key, '1'); } catch (e) {} };
+}
+function tgInit() {
+  if (guest || !session || !session.user) return;
+  if (tgUid === session.user.id) return;
+  tgUid = session.user.id; tgState = null; tgDraw();
+  tgApi('me').then(function (j) { tgState = j; tgDraw(); tgPopup(); }).catch(function () {});
+}
+function tgEvent(kind) {
+  if (!tgState || !tgState.show) return;
+  var o = kind === 'call' ? tgState.calls : tgState.emails; o.done++; tgDraw();
+  tgApi('event', { kind: kind }).then(function (j) { if (j && j.show) { tgState.emails = j.emails; tgState.calls = j.calls; tgDraw(); } }).catch(function () {});
+}
+var _lgAdd1 = lgAdd;
+lgAdd = function (dot, e) {
+  var has = e && (e.type === 'call' || e.type === 'email') && getLeads().some(function (y) { return y.dot === dot; });
+  _lgAdd1(dot, e);
+  if (has) tgEvent(e.type);
+};
+var _sa1 = showApp;
+showApp = function () { _sa1(); tgInit(); };
+var _sv1 = showView;
+showView = function (v) { _sv1(v); $('tgStrip').style.marginBottom = v === 'dash' ? '60px' : '14px'; if (v === 'team' && tMe && tMe.role === 'admin') tgLoad(); };
+
+/* admin: targets table */
+function tgLoad() {
+  tgApi('team').then(function (j) {
+    $('tgAllE').placeholder = 'Emails (' + j.defaults.emails + ')'; $('tgAllC').placeholder = 'Calls (' + j.defaults.calls + ')';
+    $('tgTable').innerHTML = j.members.length ? '<table style="min-width:640px"><thead><tr><th>Member</th><th>Emails today</th><th>Calls today</th><th>Target: emails</th><th>Target: calls</th><th></th></tr></thead><tbody>' + j.members.map(function (m) {
+      var okE = m.emailsDone >= m.target.emails, okC = m.callsDone >= m.target.calls;
+      return '<tr><td>' + esc(m.name || m.email) + '<div class="small">' + esc(m.email) + '</div></td><td class="tgc ' + (okE ? 'tgy' : '') + '">' + m.emailsDone + ' / ' + m.target.emails + '</td><td class="tgc ' + (okC ? 'tgy' : '') + '">' + m.callsDone + ' / ' + m.target.calls + '</td>' +
+        '<td><input class="tgn" type="number" min="0" id="tgE_' + m.id + '" value="' + m.target.emails + '"></td><td><input class="tgn" type="number" min="0" id="tgC_' + m.id + '" value="' + m.target.calls + '"></td>' +
+        '<td><button type="button" onclick="tgSave(\'' + m.id + '\')">Save</button></td></tr>';
+    }).join('') + '</tbody></table>' : '<p class="small" style="padding:12px">No team members yet. Use "Add to team" below.</p>';
+  }).catch(function (e) { $('tgTable').innerHTML = '<p class="small" style="padding:12px;color:#dc2626">' + esc(e.message) + '</p>'; });
+}
+function tgSave(id) {
+  tgApi('set', { userId: id, emails: $('tgE_' + id).value, calls: $('tgC_' + id).value }).then(function () { $('tgMsg').textContent = 'Saved ✅'; tgLoad(); }).catch(function (e) { $('tgMsg').textContent = e.message; });
+}
+$('tgAllBtn').onclick = function () {
+  var e = $('tgAllE').value, c = $('tgAllC').value;
+  if (e === '' || c === '') { $('tgMsg').textContent = 'Enter both emails and calls.'; return; }
+  if (!confirm('Set ' + e + ' emails + ' + c + ' calls per day for ALL team members?')) return;
+  tgApi('set', { userId: 'all', emails: e, calls: c }).then(function (j) { $('tgMsg').textContent = 'Updated ' + j.count + ' members ✅'; tgLoad(); }).catch(function (er) { $('tgMsg').textContent = er.message; });
+};
+
+/* admin: weekly report */
+$('tgRep').onclick = function () {
+  $('tgReport').innerHTML = '<p class="small" style="padding:12px">Loading…</p>';
+  tgApi('weekly', { offset: parseInt($('tgWk').value, 10) }).then(function (j) {
+    tgRepData = j;
+    var dl = function (d) { return new Date(d + 'T00:00:00').toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' }); };
+    var head = '<th>Member</th><th>Target / day</th>' + j.days.map(function (d) { return '<th class="tgc">' + dl(d) + '</th>'; }).join('') + '<th class="tgc">Days met</th><th class="tgc">Emails</th><th class="tgc">Calls</th><th>Result</th>';
+    var rows = j.members.map(function (m) {
+      var cells = m.per.map(function (x) { return '<td class="tgc ' + (x.open ? 'tgo' : x.met ? 'tgy' : 'tgx') + '">' + (x.open ? '⏳ ' : x.met ? '✅ ' : '❌ ') + x.e + ' / ' + x.c + '</td>'; }).join('');
+      var res = m.achieved === null ? '<span class="tgo">—</span>' : m.achieved ? '<span class="tgy">✅ Target met</span>' : '<span class="tgx">❌ Not met</span>';
+      return '<tr><td>' + esc(m.name) + '</td><td class="tgc">' + m.target.emails + ' / ' + m.target.calls + '</td>' + cells + '<td class="tgc">' + m.daysMet + ' / ' + m.counted + '</td><td class="tgc">' + m.totalE + ' / ' + m.target.emails * m.counted + '</td><td class="tgc">' + m.totalC + ' / ' + m.target.calls * m.counted + '</td><td>' + res + '</td></tr>';
+    }).join('');
+    $('tgReport').innerHTML = (j.members.length ? '<table style="min-width:760px"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="small" style="padding:12px">No members.</p>') +
+      '<p class="small" style="padding:6px 12px">Each cell is emails / calls done that day. ✅ = both targets reached. ⏳ = today, still in progress. Totals use the member\'s current target.</p>';
+    $('tgCsv').style.display = j.members.length ? '' : 'none';
+  }).catch(function (e) { $('tgReport').innerHTML = '<p class="small" style="padding:12px;color:#dc2626">' + esc(e.message) + '</p>'; });
+};
+$('tgCsv').onclick = function () {
+  if (!tgRepData) return;
+  var q = function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+  var rows = [['Member', 'Target emails/day', 'Target calls/day'].concat(tgRepData.days.map(function (d) { return d + ' (emails/calls)'; }), ['Days met', 'Total emails', 'Total calls', 'Result']).map(q).join(',')];
+  tgRepData.members.forEach(function (m) { rows.push([m.name, m.target.emails, m.target.calls].concat(m.per.map(function (x) { return x.e + '/' + x.c + (x.open ? ' (in progress)' : x.met ? ' met' : ' missed'); }), [m.daysMet + '/' + m.counted, m.totalE, m.totalC, m.achieved === null ? '-' : m.achieved ? 'Target met' : 'Not met']).map(q).join(',')); });
+  dl('weekly-report-' + tgRepData.weekStart + '.csv', rows.join('\n'));
+};
 </script>
 </body>
 </html>
