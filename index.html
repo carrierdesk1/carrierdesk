@@ -301,6 +301,11 @@ html.dark .tgpb .tgb{background:#243049}
 .tgpb .tgb i{display:block;height:100%;background:#2a74f5}
 .tgpb .tgb i.ok{background:#16a34a}
 .tgrow{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+/* ---- copy buttons ---- */
+.cpb{margin-left:8px;padding:3px 8px;border:1px solid var(--line);border-radius:8px;background:transparent;cursor:pointer;font-size:12px;line-height:1.2;vertical-align:middle;color:var(--mut)}
+.cpb:hover{border-color:var(--acc);color:var(--acc)}
+.cpb.done{color:#16a34a;border-color:#16a34a;font-weight:700}
+.cc h2 .cpb{font-size:13px}
 </style>
 </head>
 <body>
@@ -381,9 +386,7 @@ html.dark .tgpb .tgb{background:#243049}
         <input id="q" placeholder="Enter MC, DOT or company name" required>
         <button class="go" type="submit">🔍 Search carriers</button>
       </form>
-      <div id="msg"></div>
-      <div id="results"></div>
-
+      
       <div class="bulkgrid">
         <form id="bf" class="panel bpanel">
           <div class="ptitle">🔍 Bulk search</div>
@@ -500,7 +503,13 @@ html.dark .tgpb .tgb{background:#243049}
     </section>
 
     <!-- My leads -->
-    <section id="viewTL" class="pad" style="display:none;margin-top:24px"><div class="cdbox">
+    <section id="viewCarrier" class="pad" style="display:none;margin-top:24px">
+<div class="cdrow" style="margin:0 0 10px"><button type="button" id="cvBack">← Back to dashboard</button></div>
+<form id="cvF" class="panel searchbar"><select id="cvType"><option value="mc">MC number</option><option value="dot">DOT number</option><option value="name">Company name</option></select><input id="cvQ" placeholder="Search another MC, DOT or company name" required><button class="go" type="submit">🔍 Search carriers</button></form>
+<div id="msg"></div>
+<div id="results"></div>
+</section>
+<section id="viewTL" class="pad" style="display:none;margin-top:24px"><div class="cdbox">
 <h3>Team Leads</h3>
 <p class="small" style="margin:0 0 10px">Leads of your team members and the other admins. Every person's list is separate. This page is read-only; your own leads are in <b>My Leads</b>.</p>
 <div class="cdrow"><select id="tlMem"><option value="">All members</option></select><select id="tlSt"><option value="">Any status</option></select><input id="tlQ" placeholder="Search name, MC, phone, email…" style="flex:1;min-width:170px"><button type="button" class="go" id="tlGo">Search</button></div>
@@ -905,7 +914,8 @@ function ccCopy(i, btn) {
   else { prompt('Copy:', t); }
 }
 function ccD(v) { var d = ccDate(v); return d ? (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear() : (v || ''); }
-function ccF(l, v, raw) { return '<div><div class="lbl">' + l + '</div><div class="val">' + (raw ? v : esc(v || '—')) + '</div></div>'; }
+function cpBtn(t) { t = String(t == null ? '' : t).trim(); return t && t !== '—' ? '<button type="button" class="cpb" data-cp="' + esc(t) + '" title="Copy" aria-label="Copy">📋</button>' : ''; }
+function ccF(l, v, raw, cp) { var t = cp != null ? cp : (raw ? '' : v); return '<div><div class="lbl">' + l + '</div><div class="val">' + (raw ? v : esc(v || '—')) + cpBtn(t) + '</div></div>'; }
 function card(c, idx) {
   var a = c.authorized, n = ins(c), act = c.common === 'Active';
   var since = ccDate(c.authSince || c.censusAddDate);
@@ -915,15 +925,15 @@ function card(c, idx) {
   var officers = [c.officer1, c.officer2].filter(Boolean).join(', ');
   var wa = String(c.cellPhone || c.phone || '').replace(/\D/g, '');
   if (wa.length === 10) wa = '1' + wa;
-  return '<div class="cc"><div class="cc-h"><div><h2>' + esc(c.name) + '</h2>' +
-    (c.legalName && c.legalName !== c.name ? '<div class="sub">Legal name: ' + esc(c.legalName) + '</div>' : '') +
+  return '<div class="cc"><div class="cc-h"><div><h2>' + esc(c.name) + cpBtn(c.name) + '</h2>' +
+    (c.legalName && c.legalName !== c.name ? '<div class="sub">Legal name: ' + esc(c.legalName) + cpBtn(c.legalName) + '</div>' : '') +
     (c.authUnverified ? '<div class="cc-st cc-warn">⏳ Authority not verified yet (new carrier)</div>' : '<div class="cc-st ' + (act ? 'cc-ok' : 'cc-bad') + '">' + (act ? '✔' : '✖') + ' Common Authority: ' + esc(c.common) + '</div>') +
     (since ? '<div class="small" style="margin-top:4px">Active for <b>' + ccAge(since) + '</b> · since ' + (since.getMonth() + 1) + '/' + since.getDate() + '/' + since.getFullYear() + '</div>' : '') + '</div>' +
     '<div class="cc-chips">' + (c.authUnverified ? '<span class="cc-chip cc-warn">Authority not verified</span>' : '<span class="cc-chip ' + (a ? 'cc-ok' : 'cc-bad') + '">' + (a ? 'Authorized to operate' : 'Not authorized') + '</span>') +
     (c.oos ? '<span class="cc-chip cc-bad">Out of service</span>' : '') + '</div></div>' +
     '<div class="cc-b">' + ccFlags(c) + '<div class="cc-tiles">' +
-    '<div><div class="lbl">Insurance</div><div class="cc-tv ' + (n.bad ? 'bad' : 'ok') + '">' + n.t + '</div><div class="small">' + esc(n.s) + '</div></div>' +
-    '<div><div class="lbl">Fleet size</div><div class="cc-tv">' + c.powerUnits + ' Power Units</div><div class="small">' + c.drivers + ' Drivers</div></div>' +
+    '<div><div class="lbl">Insurance</div><div class="cc-tv ' + (n.bad ? 'bad' : 'ok') + '">' + n.t + cpBtn(n.t + ' - ' + n.s) + '</div><div class="small">' + esc(n.s) + '</div></div>' +
+    '<div><div class="lbl">Fleet size</div><div class="cc-tv">' + c.powerUnits + ' Power Units' + cpBtn(c.powerUnits + ' power units, ' + c.drivers + ' drivers') + '</div><div class="small">' + c.drivers + ' Drivers</div></div>' +
     '<div><div class="lbl">Authority</div><div class="cc-tv">' + (c.authUnverified ? 'Not verified' : act ? 'Active' : 'Inactive') + '</div><div class="small">Contract: ' + esc(c.contract) + ' · Broker: ' + esc(c.broker) + '</div></div></div>' +
     '<div class="cc-sec">Identifiers &amp; classification</div><div class="cc-g">' +
     ccF('USDOT', c.dot) + ccF('MC docket', (c.mc || []).join(', ')) + ccF('Status', c.authUnverified ? (String(c.statusCode || '').toUpperCase() === 'A' ? 'Active' : '—') : act ? 'Active' : 'Inactive') +
@@ -933,15 +943,15 @@ function card(c, idx) {
     '<div class="cc-sec">Cargo</div><div class="cc-cargo">' +
     ((c.cargo || []).length ? c.cargo.map(function (x) { return '<span class="cc-chip">' + esc(x) + '</span>'; }).join('') : '<span class="small">—</span>') + '</div>' +
     '<div class="cc-sec">Contact information' + (c.enriching ? ' <span class="small" style="text-transform:none;letter-spacing:0">(loading…)</span>' : '') + '</div><div class="cc-g">' +
-    ccF('Primary officer', officers) + ccF('Email', mail, 1) + ccF('Phone', tel(c.phone), 1) +
-    ccF('Cell phone', tel(c.cellPhone), 1) + ccF('Physical address', map(c.address), 1) + ccF('Mailing address', map(c.mailing), 1) + '</div>' +
+    ccF('Primary officer', officers) + ccF('Email', mail, 1, c.email) + ccF('Phone', tel(c.phone), 1, c.phone) +
+    ccF('Cell phone', tel(c.cellPhone), 1, c.cellPhone) + ccF('Physical address', map(c.address), 1, c.address) + ccF('Mailing address', map(c.mailing), 1, c.mailing) + '</div>' +
     (!c.email && !c.phone && !c.enriching ? '<div class="small" style="margin-top:10px;word-break:break-word">' + esc(c.censusNote || 'No contact data found for this carrier.') + ' <a href="#" onclick="ccRetry(' + idx + ');return false">↻ Retry</a></div>' : '') +
     ccFleet(c) + '</div><div class="cc-act"><button type="button" onclick="save(' + idx + ')">Save lead</button>' +
     (c.phone || c.cellPhone ? '<a class="alt" href="tel:' + esc(String(c.phone || c.cellPhone).replace(/\D/g, '')) + '">📞 Call</a>' : '') +
     (wa ? '<a class="alt" target="_blank" rel="noopener" href="https://wa.me/' + wa + '?text=' + encodeURIComponent(ccMsg(c) + '\n\nM&H Dispatch Solutions') + '">💬 WhatsApp</a>' : '') +
     '<a class="alt" target="_blank" rel="noopener" href="https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot&query_param=USDOT&query_string=' + encodeURIComponent(c.dot) + '">SAFER ↗</a>' +
     (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '?subject=' + encodeURIComponent('Dispatch services for ' + c.name) + '&body=' + encodeURIComponent(ccMsg(c) + '\n\nBest regards,\nJax\nM&H Dispatch Solutions') + '">✉ Email</a>' : '') +
-    '<button type="button" class="alt" onclick="ccProf(' + idx + ')">📋 Carrier profile</button>' + '<button type="button" class="alt" onclick="ccCopy(' + idx + ', this)">📋 Copy message</button>' + '</div></div>';
+    '<button type="button" class="alt" onclick="ccProf(' + idx + ')">📋 Carrier profile</button>' + '<button type="button" class="alt" onclick="ccCopyAll(' + idx + ', this)">📋 Copy all details</button>' + '<button type="button" class="alt" onclick="ccCopy(' + idx + ', this)">📋 Copy message</button>' + '</div></div>';
 }
 function ccRender() { $('results').innerHTML = found.map(card).join(''); }
 function ccRetry(i) {
@@ -2409,6 +2419,48 @@ tgPopup = function () {
   mo.style.display = 'flex';
   $('tgOk').onclick = function () { mo.style.display = 'none'; try { localStorage.setItem(key, '1'); } catch (e) {} };
 };
+
+/* ================= carrier details on their own page + copy buttons ================= */
+function cpyText(t, btn) {
+  var ok = function () { if (btn) { var o = btn.textContent; btn.classList.add('done'); btn.textContent = '✓ Copied'; setTimeout(function () { btn.textContent = o; btn.classList.remove('done'); }, 1200); } };
+  var fb = function () {
+    try { var ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.focus(); ta.select(); var r = document.execCommand('copy'); document.body.removeChild(ta); if (r) { ok(); return; } } catch (e) {}
+    prompt('Copy:', t);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, fb); else fb();
+}
+document.addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('.cpb') : null; if (!b) return;
+  e.preventDefault(); e.stopPropagation(); cpyText(b.getAttribute('data-cp') || '', b);
+});
+function ccCopyAll(i, btn) {
+  var c = found[i]; if (!c) return;
+  var n = ins(c), L = [];
+  var add = function (k, v) { if (v != null && String(v).trim() !== '') L.push(k + ': ' + v); };
+  add('Company', c.name); if (c.legalName && c.legalName !== c.name) add('Legal name', c.legalName);
+  add('MC', (c.mc || []).join(', ')); add('USDOT', c.dot);
+  add('Officer', [c.officer1, c.officer2].filter(Boolean).join(', '));
+  add('Phone', c.phone); add('Cell', c.cellPhone); add('Email', c.email);
+  add('Address', c.address); add('Mailing address', c.mailing);
+  add('Fleet', c.powerUnits + ' power units, ' + c.drivers + ' drivers');
+  add('Insurance', n.t + ' - ' + n.s);
+  add('Authority', c.authUnverified ? 'Not verified yet' : (c.common || ''));
+  add('Safety rating', c.safetyRating || 'Not rated');
+  cpyText(L.join('\n'), btn);
+}
+/* a search opens the result page */
+$('f').addEventListener('submit', function () {
+  $('cvType').value = $('type').value; $('cvQ').value = $('q').value;
+  showView('carrier'); window.scrollTo(0, 0);
+});
+$('cvF').addEventListener('submit', function (e) {
+  e.preventDefault();
+  $('type').value = $('cvType').value; $('q').value = $('cvQ').value;
+  $('f').dispatchEvent(new Event('submit', { cancelable: true }));
+});
+$('cvBack').onclick = function () { showView('dash'); };
+var _sv3 = showView;
+showView = function (v) { _sv3(v); $('viewCarrier').style.display = v === 'carrier' ? '' : 'none'; };
 </script>
 </body>
 </html>
