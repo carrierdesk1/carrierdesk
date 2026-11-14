@@ -172,14 +172,23 @@ async function insuranceFor(mcList, until) {
     const dockCol = keys.find((k) => /^docket(_number)?$/i.test(k)) || keys.find((k) => /docket/i.test(k));
     const typeCol = keys.find((k) => /ins.*type|type.*desc|ins_class|mod_col/i.test(k)) || '';
     const amtCol = keys.find((k) => /max_cov/i.test(k)) || '';
+    const insurerCol = keys.find((k) => /name_company|insurer|company_name/i.test(k)) || '';
+    const effCol = keys.find((k) => /^effective_date$|eff.*date/i.test(k)) || '';
+    const canCol = keys.find((k) => /(cancl|cancel)/i.test(k) && /date/i.test(k)) || '';
     if (!dockCol) return null;
     const vals = "'MC" + mc + "','" + mc + "'";
-    const rows = await sodaAt(INS, { $select: [dockCol, typeCol, amtCol].filter(Boolean).join(','), $where: dockCol + ' in (' + vals + ')', $limit: 200 }, 5000, 1, until);
+    const rows = await sodaAt(INS, { $select: [dockCol, typeCol, amtCol, insurerCol, effCol, canCol].filter(Boolean).join(','), $where: dockCol + ' in (' + vals + ')', $limit: 200 }, 5000, 1, until);
     if (!rows.length) return { bipdOnFile: 0 };
     const isBipd = (r) => /bipd|primary|liab/i.test(String(r[typeCol] || ''));
     const list = typeCol && rows.some(isBipd) ? rows.filter(isBipd) : rows;
     const amt = list.reduce((mx, r) => Math.max(mx, amtCol ? kNum(r[amtCol]) : 0), 0);
-    return { bipdOnFile: amt };
+    const top = list.slice().sort((a, b) => (amtCol ? kNum(b[amtCol]) - kNum(a[amtCol]) : 0))[0] || {};
+    return {
+      bipdOnFile: amt,
+      insurer: insurerCol ? String(top[insurerCol] || '') : '',
+      effective: effCol && top[effCol] ? day(top[effCol]) : '',
+      cancel: canCol && top[canCol] ? day(top[canCol]) : ''
+    };
   } catch (e) {
     return null;
   }
@@ -253,6 +262,15 @@ function shape(c, mcList, cs, note) {
     mileage: cs.mcs150_mileage || '',
     safetyRating: c.safetyRating || '',
     crashTotal: kNum(c.crashTotal),
+    vehicleInsp: c.vehicleInsp == null ? null : kNum(c.vehicleInsp),
+    vehicleOosInsp: c.vehicleOosInsp == null ? null : kNum(c.vehicleOosInsp),
+    vehicleOosRate: c.vehicleOosRate == null ? null : parseFloat(c.vehicleOosRate),
+    driverInsp: c.driverInsp == null ? null : kNum(c.driverInsp),
+    driverOosInsp: c.driverOosInsp == null ? null : kNum(c.driverOosInsp),
+    driverOosRate: c.driverOosRate == null ? null : parseFloat(c.driverOosRate),
+    fatalCrash: c.fatalCrash == null ? null : kNum(c.fatalCrash),
+    injCrash: c.injCrash == null ? null : kNum(c.injCrash),
+    towCrash: c.towawayCrash == null ? null : kNum(c.towawayCrash),
     cargo: cargoList(cs),
     mailing: mailingOf(cs),
     fleet: fleetOf(cs),
@@ -429,6 +447,7 @@ module.exports = async (req, res) => {
         if (au && au.bipdOnFile > 0) shaped.insurance.bipdOnFile = au.bipdOnFile;
         if (au && au.minCov > 0) shaped.insurance.bipdRequired = au.minCov;
         if (ins && ins.bipdOnFile > 0 && !(shaped.insurance.bipdOnFile > 0)) shaped.insurance.bipdOnFile = ins.bipdOnFile;
+        if (ins && (ins.insurer || ins.effective || ins.cancel)) shaped.insDetail = { insurer: ins.insurer, effective: ins.effective, cancel: ins.cancel };
         const payload = { results: [shaped] };
         cacheSet(ck, payload);
         res.setHeader('Cache-Control', 'no-store');
@@ -461,8 +480,12 @@ module.exports = async (req, res) => {
         })();
         // contact data only for the first 4 results (avoids Census rate limits); search by DOT for the rest
         const crP = idx < 4 ? census(c.dotNumber) : Promise.resolve({ row: null, err: 'Contact data loads for the first results only. Press Retry or search by DOT.' });
-        const [mcs, cr] = await Promise.all([mcPromise, crP]);
-        return shape(c, mcs, cr.row, cr.err);
+        const mcs = await mcPromise;
+        const insP = idx < 4 ? insuranceFor(mcs, until) : Promise.resolve(null);
+        const [cr, insx] = await Promise.all([crP, insP]);
+        const sh = shape(c, mcs, cr.row, cr.err);
+        if (insx && (insx.insurer || insx.effective || insx.cancel)) sh.insDetail = { insurer: insx.insurer, effective: insx.effective, cancel: insx.cancel };
+        return sh;
       })
     );
 
