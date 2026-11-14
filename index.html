@@ -485,6 +485,7 @@ html.dark .hero{background:#1a0d10!important;color:#fff;border-color:#3a1a1e}htm
 .cdi s{display:none}
 .ic .cdi{margin:0}.ic .cdi svg{width:22px;height:22px;stroke:#fff}
 a.ib .cdi svg{width:14px;height:14px}
+#vrBox{background:#fff6f6;color:#7d0b12;border:1px solid #f0c4c6;border-radius:14px;display:none;align-items:center;gap:12px;flex-wrap:wrap}#vrBox button{margin-left:auto}
 </style>
 </head>
 <body>
@@ -735,7 +736,8 @@ a.ib .cdi svg{width:14px;height:14px}
 </div></section>
 <section id="viewLeads" class="pad" style="display:none;margin-top:24px">
       <h3>My leads</h3>
-      <div class="mlbar"><b>✉ Send email</b><span class="small" id="mlInfo"></span><button type="button" class="mln" data-n="20">20 emails</button><button type="button" class="mln" data-n="25">25 emails</button><button type="button" class="mln" data-n="50">50 emails</button></div>
+      <div class="mlbar"><b>✉ Send email</b><span class="small" id="mlInfo"></span><button type="button" class="btn-o" id="mlVerify">✅ Verify emails</button><button type="button" class="mln" data-n="20">20 emails</button><button type="button" class="mln" data-n="25">25 emails</button><button type="button" class="mln" data-n="50">50 emails</button></div>
+      <div id="vrBox" class="notice" style="display:none"></div>
       <div class="tools" style="margin-bottom:12px">
         <button id="csv" type="button" class="btn-g">Download CSV</button>
         <button id="clear" type="button">Clear all leads</button>
@@ -2829,6 +2831,41 @@ $('mlGo').onclick=function(){
   new MutationObserver(sched).observe(document.body,{childList:true,subtree:true});
   walk(document.body);
 })();
+
+/* ===== My Leads: verify emails and auto-remove bad ones ===== */
+var vrRemoved=[];
+function vrBox(html){var b=$('vrBox');b.innerHTML=html;b.style.display=html?'flex':'none';}
+$('mlVerify').onclick=function(){
+  var btn=this,mine=getLeads().filter(function(x){return lgMine(x)&&String(x.email||'').trim();});
+  if(!mine.length){alert('No leads with an email address.');return;}
+  var seen={},uniq=[];
+  mine.forEach(function(x){var e=String(x.email).trim().toLowerCase();if(!seen[e]){seen[e]=1;uniq.push(e);}});
+  btn.disabled=true;vrBox('');
+  var res={},i=0;
+  (function next(){
+    if(i>=uniq.length)return done();
+    btn.textContent='Checking '+Math.min(i+400,uniq.length)+' / '+uniq.length+'…';
+    capi('verify',{emails:uniq.slice(i,i+400)}).then(function(j){(j.results||[]).forEach(function(r){res[String(r.email).trim().toLowerCase()]=r;});i+=400;next();})
+      .catch(function(e){btn.disabled=false;btn.textContent='Verify emails';vrBox('⚠ '+esc(e.message||'Verify failed')+'. No leads were removed.');});
+  })();
+  function done(){
+    btn.disabled=false;btn.textContent='Verify emails';
+    var used={},bad=[],good=0,kept=0;
+    mine.forEach(function(x){
+      var e=String(x.email).trim().toLowerCase(),r=res[e],dup=!!used[e],ok=(!r||r.ok)&&!dup;
+      if(!dup)used[e]=1;
+      if(ok){good++;return;}
+      var prot=(x.status&&x.status!=='New')||(x.log||[]).length;
+      if(prot)kept++;else bad.push(x);
+    });
+    var rm={};bad.forEach(function(x){rm[x.dot]=1;});
+    vrRemoved=bad;
+    if(bad.length){setLeads(getLeads().filter(function(x){return !rm[x.dot];}));}
+    renderLeads();
+    vrBox('<span><b class="cdok">'+good+' good</b> kept · <b class="cdbad">'+bad.length+' removed</b>'+(kept?' · '+kept+' bad but already contacted (kept)':'')+'</span>'+(bad.length?'<button type="button" id="vrUndo">Undo</button>':''));
+    if(bad.length)$('vrUndo').onclick=function(){setLeads(getLeads().concat(vrRemoved));vrRemoved=[];renderLeads();vrBox('↩ Removed leads restored.');};
+  }
+};
 </script>
 </body>
 </html>
