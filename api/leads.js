@@ -17,7 +17,7 @@ module.exports = async (req, res) => {
     const isMember = user.prof.approved === true;
     const isAdmin = isMember && user.prof.role === 'admin';
     const isOwner = isMember && user.prof.is_owner === true;
-    const team = async () => (await sb('profiles?approved=eq.true&select=id,name,email,role&limit=1000')) || [];
+    const team = async () => (await sb('profiles?approved=eq.true&select=*&limit=1000')) || [];
 
     if (act === 'assign') {
       if (!isAdmin) return res.status(403).json({ error: 'Admins only.' });

@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'Bad user id.' });
     if (id === me.id) return res.status(400).json({ error: 'You cannot delete your own account.' });
 
-    const rows = await sb('profiles?id=eq.' + id + '&select=id,role,approved,email');
+    const rows = await sb('profiles?id=eq.' + id + '&select=*');
     const target = rows && rows[0];
     if (target && target.role === 'admin' && target.approved) return res.status(400).json({ error: 'This user is an admin. Make them a member first, then delete.' });
 

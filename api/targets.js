@@ -12,7 +12,7 @@ const mondayOf = (iso) => addDays(iso, -((new Date(iso + 'T00:00:00Z').getUTCDay
 const num = (v, max) => Math.max(0, Math.min(max || 5000, parseInt(v, 10) || 0));
 
 async function members() {
-  const rows = await sb('profiles?approved=eq.true&select=id,name,email,role&limit=1000');
+  const rows = await sb('profiles?approved=eq.true&select=*&limit=1000');
   const t = await sb('team_targets?select=*&limit=1000');
   const by = {}; (t || []).forEach((x) => { by[x.user_id] = x; });
   // admins only take part when they have an explicit target row
