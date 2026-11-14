@@ -486,6 +486,25 @@ html.dark .hero{background:#1a0d10!important;color:#fff;border-color:#3a1a1e}htm
 .ic .cdi{margin:0}.ic .cdi svg{width:22px;height:22px;stroke:#fff}
 a.ib .cdi svg{width:14px;height:14px}
 #vrBox{background:#fff6f6;color:#7d0b12;border:1px solid #f0c4c6;border-radius:14px;display:none;align-items:center;gap:12px;flex-wrap:wrap}#vrBox button{margin-left:auto}
+
+/* ===== pricing plans ===== */
+.pl-note{background:#fff6f6;border:1px solid #f0c4c6;color:#7d0b12;border-radius:12px;padding:10px 14px;margin:0 0 14px;font-size:14px}
+.pl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px}
+.pl-card{position:relative;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;transition:transform .18s,box-shadow .18s}
+.pl-card:hover{transform:translateY(-3px);box-shadow:0 16px 32px rgba(120,12,18,.14)}
+.pl-card.pop{background:#fff1f1;border:1.5px solid #e0252c}
+.pl-tag{font-size:11px;font-weight:700;color:#8a5b5d;letter-spacing:.06em}
+.pl-pop{position:absolute;top:-11px;right:16px;background:#d91f26;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:99px}
+.pl-card h4{margin:6px 0 4px;font-size:22px}.pl-card .pl-d{font-size:13px;color:var(--mut);min-height:36px;margin:0}
+.pl-price{margin:12px 0}.pl-price b{font-size:36px;letter-spacing:-.02em}.pl-price span{color:var(--mut);font-size:13px}
+a.pl-wa{display:block;text-align:center;background:#16a34a;color:#fff;border-radius:11px;padding:11px;font-weight:700;text-decoration:none}
+a.pl-wa:hover{background:#15803d;text-decoration:none}
+.pl-cur{display:block;text-align:center;border:1.5px solid #16a34a;color:#15803d;border-radius:11px;padding:10px;font-weight:700}
+.pl-card ul{list-style:none;padding:0;margin:14px 0 0;font-size:13px;display:flex;flex-direction:column;gap:7px}
+.pl-card li{padding-left:22px;position:relative}.pl-card li::before{content:"✓";position:absolute;left:0;color:#d91f26;font-weight:800}
+.pl-card li.no{color:#a1a1aa;text-decoration:line-through}.pl-card li.no::before{content:"–";color:#a1a1aa}
+.pl-card li.soon{color:#8a8f98}.pl-card li.soon::before{content:"○";color:#b9bcc4}.pl-card li.soon::after{content:"Soon";margin-left:6px;font-size:10px;font-weight:800;background:#f1f1f3;color:#6b7280;border-radius:99px;padding:1px 7px}
+.side nav a[data-lock]{opacity:.6}.lk{margin-left:auto;display:inline-flex}.lk .cdi svg{width:14px;height:14px}
 </style>
 </head>
 <body>
@@ -2111,10 +2130,10 @@ function tShow2() {
   if (!rows.length) { $('tmlist').innerHTML = '<p class="small" style="padding:14px">No account found with this email. (' + tCache.length + ' accounts loaded in total)</p>'; return; }
   $('tmlist').innerHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>WhatsApp</th><th>Access</th><th>Plan</th><th></th></tr></thead><tbody>' + rows.map(function (m) {
     var me = m.id === session.user.id, live = m.plan === 'paid' && m.plan_expires && Date.parse(m.plan_expires) > Date.now();
-    var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) : m.plan === 'paid' ? 'Expired' : 'Free · ' + (parseInt(m.free_fetches, 10) || 0) + '/' + FREE_FETCHES + ' used';
+    var plan = m.approved ? 'Team' : live ? 'Paid until ' + m.plan_expires.slice(0, 10) + (m.plan_tier ? ' · ' + m.plan_tier : '') : m.plan === 'paid' ? 'Expired' : 'Free · ' + (parseInt(m.free_fetches, 10) || 0) + '/' + FREE_FETCHES + ' used';
     var B = function (t, o) { return '<button type="button" onclick="tSet(\'' + m.id + '\',' + o + ')">' + t + '</button> '; };
     return '<tr><td>' + esc(m.name || '') + '</td><td>' + esc(m.email || '') + '</td><td>' + tWa(m) + '</td><td>' + (m.approved ? esc(m.role) : 'customer') + '</td><td><span class="au ' + (m.approved || live ? 'au-Active' : 'au-Unknown') + '">' + esc(plan) + '</span></td><td>' +
-      (me ? '(you)' : B(m.approved ? 'Remove from team' : 'Add to team', '{approved:' + !m.approved + '}') + (m.approved ? B(m.role === 'admin' ? 'Make member' : 'Make admin', "{role:'" + (m.role === 'admin' ? 'member' : 'admin') + "'}") : B('✅ +30 days', 'tPlus(\'' + (m.plan_expires || '') + '\')') + B('Set free', "{plan:'free'}")) + (m.role === 'admin' && m.approved ? '' : '<button type="button" style="color:#dc2626" onclick="tDelUser(\'' + m.id + '\')">🗑 Delete user</button>')) + '</td></tr>';
+      (me ? '(you)' : B(m.approved ? 'Remove from team' : 'Add to team', '{approved:' + !m.approved + '}') + (m.approved ? B(m.role === 'admin' ? 'Make member' : 'Make admin', "{role:'" + (m.role === 'admin' ? 'member' : 'admin') + "'}") : '<select id="tr_' + m.id + '" style="padding:6px 8px">' + PLAN_TIERS.map(function (t) { return '<option value="' + t.key + '"' + (m.plan_tier === t.key ? ' selected' : '') + '>' + t.name + '</option>'; }).join('') + '</select> ' + B('✅ +30 days', 'tPlusT(\'' + (m.plan_expires || '') + '\', document.getElementById(\'tr_' + m.id + '\').value)') + B('Set free', "{plan:'free'}")) + (m.role === 'admin' && m.approved ? '' : '<button type="button" style="color:#dc2626" onclick="tDelUser(\'' + m.id + '\')">🗑 Delete user</button>')) + '</td></tr>';
   }).join('') + '</tbody></table>';
 }
 function tWaMsg(m) {
@@ -2866,6 +2885,102 @@ $('mlVerify').onclick=function(){
     if(bad.length)$('vrUndo').onclick=function(){setLeads(getLeads().concat(vrRemoved));vrRemoved=[];renderLeads();vrBox('↩ Removed leads restored.');};
   }
 };
+
+/* ===== plans: tiers, pricing popup, limits ===== */
+var PLAN_TIERS = [
+  { key: 'basic', name: 'Basic', tag: 'THE ESSENTIALS', price: 36, desc: 'For dispatchers building their carrier outreach.', emails: Infinity, leads: 300, docs: false, ai: false, verify: false, track: false, pipe: false, fuel: false,
+    feats: ['Built-in carrier database with bulk search filters', 'Email carriers through Gmail', 'Daily new-carrier alerts (saved searches)', 'Insurance and authority check', 'Skip list and CSV export', '~A/B email testing'] },
+  { key: 'standard', name: 'Standard', tag: 'MOST POPULAR', price: 50, pop: 1, desc: 'For dispatchers who email and follow up every day.', emails: Infinity, leads: 1500, docs: true, ai: false, verify: true, track: true, pipe: false, fuel: true,
+    feats: ['Everything in Basic, plus:', 'Email list verification and auto-clean of My Leads', 'Live call and carrier tracking', 'Carrier documents (W-9, MC letter, dispatch agreement)', 'Fuel and route calculator', 'Priority support', '~Automatic mailbox warmup'] },
+  { key: 'premium', name: 'Premium', tag: 'TOOLS + GUIDANCE', price: 92, desc: 'For busy dispatchers who want hands-on direction.', emails: Infinity, leads: 5000, docs: true, ai: true, verify: true, track: true, pipe: false, fuel: true,
+    feats: ['Everything in Standard, plus:', 'AI Assistant for dispatch questions', 'Personal coaching', 'Email campaign guidance', 'Data management guidance', 'Follow-up strategies'] },
+  { key: 'broker', name: 'Broker', tag: 'FOR FREIGHT TEAMS', price: 240, desc: 'For brokers connecting loads with carrier capacity.', emails: Infinity, leads: Infinity, docs: true, ai: true, verify: true, track: true, pipe: true, fuel: true,
+    feats: ['Everything in Premium, plus:', 'Full carrier database access', 'Pipeline: offer, delivery and filter tracking', '~Bulk load offers to carriers'] }
+];
+function tierOf(k) { return PLAN_TIERS.filter(function (t) { return t.key === k; })[0] || Object.assign({}, PLAN_TIERS[3], { key: 'legacy', name: 'Pro' }); } /* paid accounts without a tier = Premium */
+function tPlusT(exp, key) { var o = tPlus(exp); o.plan_tier = key; return o; }
+var _pi9 = planInfo;
+planInfo = function () {
+  var p = _pi9();
+  if (p.pro && tMe && !tMe.approved && tMe.plan === 'paid') { p.tier = tierOf(tMe.plan_tier); p.label = 'Pro ' + p.tier.name + ' · ' + p.d + ' days left'; }
+  return p;
+};
+function planTier() { return planInfo().tier || { emails: Infinity, leads: Infinity, docs: true, ai: true, verify: true, track: true, pipe: true, fuel: true, name: 'Team' }; }
+function emKey() { return 'cd_em_' + (session && session.user ? session.user.id : 'g') + '_' + new Date().toISOString().slice(0, 10); }
+function emUsed() { try { return parseInt(localStorage.getItem(emKey()), 10) || 0; } catch (e) { return 0; } }
+function emInc(n) { try { localStorage.setItem(emKey(), emUsed() + n); } catch (e) {} }
+function emRem() { return Math.max(0, planTier().emails - emUsed()); }
+function nf(n) { return n === Infinity ? 'Unlimited' : String(n).replace(/\B(?=(\d{3})+$)/g, ','); }
+function tierFeats(t) {
+  return ['<li>' + (t.emails === Infinity ? 'Unlimited emails (Gmail limits apply)' : t.emails + ' emails per day') + '</li>',
+    '<li>' + (t.leads === Infinity ? 'Unlimited saved leads' : 'Up to ' + nf(t.leads) + ' saved leads') + '</li>'].concat(t.feats.map(function (f) { return f.charAt(0) === '~' ? '<li class="soon">' + f.slice(1) + '</li>' : '<li>' + f + '</li>'; })).join('');
+}
+upOpen = function (reason) {
+  var em = session && session.user ? session.user.email : '', cur = planInfo(), me = cur.tier ? cur.tier.key : '';
+  var T = planTier(), notes = {
+    trial: '<b>Your free trial (' + FREE_FETCHES + ' searches) is finished.</b> Choose a plan to keep fetching carriers.',
+    expired: '<b>Your plan has expired.</b> Choose a plan to continue.',
+    emails: '<b>You reached today\'s email limit (' + nf(T.emails) + ') on your ' + T.name + ' plan.</b> Upgrade for a higher limit, or continue tomorrow.',
+    limit: '<b>You reached the saved-leads limit (' + nf(T.leads) + ') on your ' + T.name + ' plan.</b> Upgrade to save more.',
+    docs: '<b>Carrier documents are not included in your ' + T.name + ' plan.</b> Upgrade to use them.',
+    ai: '<b>The AI Assistant is not included in your ' + T.name + ' plan.</b> Upgrade to use it.',
+    verify: '<b>Email verification is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.',
+    pipe: '<b>The Pipeline is not included in your ' + T.name + ' plan.</b> Upgrade to Broker to use it.',
+    fuel: '<b>The Fuel & Map calculator is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.',
+    track: '<b>Live carrier tracking is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.'
+  };
+  $('upmo').querySelector('h3').textContent = 'Choose your plan';
+  $('upmo').querySelector('.mbox').style.maxWidth = '1040px';
+  $('upbody').innerHTML = (notes[reason] ? '<div class="pl-note">' + notes[reason] + '</div>' : '') +
+    '<div class="pl-grid">' + PLAN_TIERS.map(function (t) {
+      var msg = encodeURIComponent('Assalamualaikum sir. This is my email: ' + em + ' . Please activate the ' + t.name + ' plan ($' + t.price + '/month) on CarrierDesk.');
+      return '<div class="pl-card' + (t.pop ? ' pop' : '') + '">' + (t.pop ? '<span class="pl-pop">Popular</span>' : '') +
+        '<div class="pl-tag">' + t.tag + '</div><h4>' + t.name + '</h4><p class="pl-d">' + t.desc + '</p>' +
+        '<div class="pl-price"><b>$' + t.price + '</b> <span>/month</span></div>' +
+        (me === t.key ? '<span class="pl-cur">Current plan</span>' : '') +
+        (PLAN.wa ? '<a class="pl-wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(PLAN.wa) + '?text=' + msg + '">' + (me === t.key ? 'Renew on WhatsApp' : 'WhatsApp') + '</a>' : '') +
+        '<ul>' + tierFeats(t) + '</ul></div>';
+    }).join('') + '</div><p class="small" style="margin:12px 0 0">Prices are per month (' + PLAN.days + ' days). Message us on WhatsApp with the email of your account (<b>' + esc(em) + '</b>); we activate the plan on that email after payment.</p>';
+  $('upmo').style.display = 'flex';
+};
+/* show the plans automatically once per session when the free trial / plan is over */
+function navLocks() {
+  var T = planTier();
+  Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) {
+    var k = a.getAttribute('data-view'), lock = ['ai', 'verify', 'track', 'pipe', 'fuel', 'docs'].indexOf(k) > -1 && !T[k], l = a.querySelector('.lk');
+    if (lock) { a.setAttribute('data-lock', '1'); if (!l) { l = document.createElement('span'); l.className = 'lk'; l.textContent = '🔒'; a.appendChild(l); } }
+    else { a.removeAttribute('data-lock'); if (l) l.remove(); }
+  });
+}
+var _pb9 = planBar;
+planBar = function () {
+  _pb9();
+  var p = planInfo();
+  if (tMe && p.tier && p.tier.leads !== Infinity) { var b = $('planbar'); b.innerHTML += ' <span class="small">Leads: <b>' + getLeads().filter(lgMine).length + ' / ' + nf(p.tier.leads) + '</b></span>'; }
+  navLocks();
+  if (tMe && !p.pro) { var k = 'cd_plans_shown'; try { if (!sessionStorage.getItem(k) && (tMe.plan === 'paid' || trialLeft() <= 0)) { sessionStorage.setItem(k, '1'); upOpen(tMe.plan === 'paid' ? 'expired' : 'trial'); } } catch (e) {} }
+};
+/* limits */
+var _lgA9 = lgAdd;
+lgAdd = function (dot, e) { var ok = e && e.type === 'email' && getLeads().some(function (y) { return y.dot === dot; }); _lgA9(dot, e); if (ok) { emInc(1); planBar(); } };
+var _eo9 = eOpen;
+eOpen = function () { if (eIdx >= eQ.length) return; if (emRem() <= 0) { upOpen('emails'); return; } emInc(1); planBar(); return _eo9.apply(this, arguments); };
+['ecGmail', 'ecApp'].forEach(function (id) { var f = $(id).onclick; $(id).onclick = function () { if (emRem() <= 0) { upOpen('emails'); return; } return f.apply(this, arguments); }; });
+var _mg9 = $('mlGo').onclick;
+$('mlGo').onclick = function () { var r = emRem(); if (r <= 0) { upOpen('emails'); return; } if (mlCount > r) { mlCount = r; alert('Your plan allows ' + r + ' more email(s) today. Opening ' + r + '.'); } _mg9.call(this); };
+var _bs9 = $('bsave').onclick;
+$('bsave').onclick = function () {
+  var cap = planTier().leads, room = cap - getLeads().filter(lgMine).length;
+  if (room <= 0) { upOpen('limit'); return; }
+  var all = bTargets();
+  if (all.length > room) { var ob = bTargets; bTargets = function () { return ob().slice(0, room); }; try { _bs9.call(this); } finally { bTargets = ob; } alert('Your plan allows ' + cap + ' saved leads, so only ' + room + ' were saved. Upgrade to save more.'); planBar(); return; }
+  _bs9.call(this); planBar();
+};
+['dOpen', 'dPick'].forEach(function (n) { var f = window[n]; window[n] = function () { if (!planTier().docs) { upOpen('docs'); return; } return f.apply(this, arguments); }; });
+var _sv9 = showView;
+showView = function (v) { var T = planTier(); if (v === 'ai' && !T.ai) { upOpen('ai'); return; } if (v === 'verify' && !T.verify) { upOpen('verify'); return; } if (v === 'track' && !T.track) { upOpen('track'); return; } if (v === 'pipe' && !T.pipe) { upOpen('pipe'); return; } if (v === 'fuel' && !T.fuel) { upOpen('fuel'); return; } if (v === 'docs' && !T.docs) { upOpen('docs'); return; } _sv9(v); };
+var _mv9 = $('mlVerify').onclick;
+$('mlVerify').onclick = function () { if (!planTier().verify) { upOpen('verify'); return; } return _mv9.apply(this, arguments); };
 </script>
 </body>
 </html>
