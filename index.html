@@ -285,6 +285,22 @@ html.dark #tgStrip .tgb{background:#243049}
 .tgn{width:84px;padding:7px 8px}
 .tgc{text-align:center;white-space:nowrap}
 .tgy{color:#16a34a;font-weight:700}.tgx{color:#dc2626;font-weight:700}.tgo{color:#94a3b8}
+/* ---- target popup ---- */
+.tgpop{max-width:440px;padding:0!important;overflow:hidden;text-align:center}
+.tgph{background:linear-gradient(135deg,#0a1830,#1d4ed8);color:#fff;padding:20px 22px 16px}
+.tgph .d{font-size:13px;letter-spacing:.06em;text-transform:uppercase;opacity:.8}
+.tgph .t{font-size:22px;font-weight:800;margin-top:4px}
+.tgpb{padding:18px 22px 20px}
+.tgpb h3{margin:0 0 2px;font-size:20px}
+.tgg{display:flex;gap:12px;margin:14px 0}
+.tgg>div{flex:1;border:1px solid var(--line);border-radius:14px;padding:12px 8px}
+.tgg b{display:block;font-size:32px;line-height:1.1;margin:2px 0}
+.tgg small{color:var(--mut);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+.tgpb .tgb{height:8px;border-radius:8px;background:#e2e8f0;overflow:hidden;margin:4px 0 10px}
+html.dark .tgpb .tgb{background:#243049}
+.tgpb .tgb i{display:block;height:100%;background:#2a74f5}
+.tgpb .tgb i.ok{background:#16a34a}
+.tgrow{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
 </style>
 </head>
 <body>
@@ -326,6 +342,7 @@ html.dark #tgStrip .tgb{background:#243049}
     <nav>
       <a href="#" data-view="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Dashboard</a>
       <a href="#" data-view="leads"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>My Leads<span class="bd" id="leadBadge">0</span></a>
+      <a href="#" data-view="tl" id="navTL" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.2a5 5 0 0 1 4.5 5.3"/></svg>Team Leads</a>
       <a href="#" data-view="track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Carrier Tracker</a>
       <a href="#" data-view="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Documents</a>
       <a href="#" data-view="pipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>Pipeline</a>
@@ -468,23 +485,30 @@ html.dark #tgStrip .tgb{background:#243049}
 <div style="margin-top:12px"><button id="fxGo" type="button" class="fx-btn">Calculate</button> <span id="fxMsg" class="small"></span></div>
 <div id="fxOut"></div><div id="fxMap"></div><p class="small" style="margin-top:8px">Miles and time come from a normal driving route (OpenStreetMap), not a truck-restricted route. Treat as an estimate.</p></div></section>
 <section id="viewTeam" class="pad" style="display:none;margin-top:24px">
-      <h3>Team activity</h3>
-      <div class="bw" style="margin-bottom:18px"><div id="tstats"></div></div>
+      <div id="tstats" style="display:none"></div>
       <h3 style="margin-top:6px">Daily targets</h3>
-      <div class="notice">Every team member gets a daily target. Their progress fills in automatically when they email or call carriers in CarrierDesk. The day follows Pakistan time. Members without a custom target use the default (100 emails + 100 calls).</div>
+      <div class="notice">Every team member gets a daily target. Their progress fills in automatically when they email or call carriers in CarrierDesk. The day follows US Eastern Time (resets at 12:00 AM ET). Members without a custom target use the default (100 emails + 100 calls).</div>
       <div class="cdrow"><input id="tgAllE" class="tgn" type="number" min="0" placeholder="Emails"><input id="tgAllC" class="tgn" type="number" min="0" placeholder="Calls"><button type="button" class="btn-o" id="tgAllBtn">Apply to all members</button><span id="tgMsg" class="small"></span></div>
       <div class="bw" style="margin-bottom:18px"><div id="tgTable"></div></div>
       <div class="cdrow"><b>Weekly report</b><select id="tgWk"><option value="0">This week</option><option value="-1">Last week</option><option value="-2">2 weeks ago</option></select><button type="button" class="go" id="tgRep">Show report</button><button type="button" class="btn-g" id="tgCsv" style="display:none">Download CSV</button></div>
-      <p class="small" style="margin:0 0 6px">Mon–Sat. A day counts when the member reaches both the email and call target. Only finished days count in the verdict (today shows as in progress).</p>
+      <p class="small" style="margin:0 0 6px">Mon–Sat (US Eastern). A day counts when the member reaches both the email and call target. Only finished days count in the verdict (today shows as in progress).</p>
       <div class="bw" style="margin-bottom:18px"><div id="tgReport"></div></div>
       <h3>Team</h3>
-      <div class="notice">Team members share one list of leads and have full access. Other signups are customers on the Free plan; search their email below and press +30 days after you receive their payment.</div>
+      <div class="notice">Team members and admins each keep their own separate leads; only the owner sees everyone's leads in Team Leads. Other signups are customers on the Free plan; search their email below and press +30 days after you receive their payment.</div>
       <div style="display:flex;gap:8px;margin-bottom:10px"><input id="tmq" placeholder="Search customer by email or name" oninput="tShow()" onkeydown="if(event.key==='Enter')tLoad()" style="flex:1"><button type="button" onclick="tLoad()">🔍 Search</button><button type="button" onclick="$('tmq').value='';tLoad()">↻ Refresh</button></div>
       <div class="bw"><div id="tmlist"></div></div>
     </section>
 
     <!-- My leads -->
-    <section id="viewVerify" class="pad" style="display:none;margin-top:24px"><div class="cdbox">
+    <section id="viewTL" class="pad" style="display:none;margin-top:24px"><div class="cdbox">
+<h3>Team Leads</h3>
+<p class="small" style="margin:0 0 10px">Leads of your team members and the other admins. Every person's list is separate. This page is read-only; your own leads are in <b>My Leads</b>.</p>
+<div class="cdrow"><select id="tlMem"><option value="">All members</option></select><select id="tlSt"><option value="">Any status</option></select><input id="tlQ" placeholder="Search name, MC, phone, email…" style="flex:1;min-width:170px"><button type="button" class="go" id="tlGo">Search</button></div>
+<div class="small" id="tlInfo" style="margin-bottom:6px"></div>
+<div class="bw"><div id="tlList"></div></div>
+<div class="cdrow"><button type="button" id="tlMore" style="display:none">Load more</button></div>
+</div></section>
+<section id="viewVerify" class="pad" style="display:none;margin-top:24px"><div class="cdbox">
 <h3>Verify Emails</h3>
 <p class="small" style="margin:0 0 10px">Paste emails (one per line or separated by commas). Checks syntax, duplicates, disposable / no-reply addresses and whether the domain can receive mail. It cannot confirm that a single mailbox exists.</p>
 <textarea id="vIn" placeholder="name@company.com"></textarea>
@@ -1824,13 +1848,15 @@ function tFirst() {
   });
 }
 function teamInit() {
+  $('navTL').style.display = 'none';
   tOn = false; cOn = false; tPrev = {}; clearInterval(tTimer); clearTimeout(tPush); tPush = null; /* fresh start per login */
   if (guest || !sb || !session) return;
   sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle().then(function (r) {
     if (r.error || !r.data) return; /* team tables not set up: keep working locally */
     tMe = r.data; planBar();
     if (!tMe.approved) { cOn = true; tFirst(); return; } /* customer: own leads saved in Supabase (user_leads), plan limits apply */
-    tOn = true;
+    tOn = true; cOn = true; tgSepInit(); /* each person keeps their own leads (user_leads) */
+    if (tMe.is_owner) $('navTL').style.display = '';
     if (tMe.role === 'admin') { $('navTeam').style.display = ''; $('bassignwrap').style.display = 'inline-block'; sb.from('profiles').select('*').then(function (r2) { if (!r2.error) { tCache = r2.data; bAssignFill(); } }); }
     tFirst();
   });
@@ -1935,13 +1961,18 @@ function lgRender() {
     '<div class="mrow"><input id="lgnote" placeholder="Add a note" style="flex:1"><button type="button" onclick="var v=$(\'lgnote\').value.trim();if(v){lgAdd(lgDot,{type:\'note\',out:v});lgRender();}">Add</button></div>' +
     '<label class="fl">Callback date</label><input type="date" value="' + esc(x.follow || '') + '" onchange="var v=this.value;lgSave(function(y){y.follow=v;})">' +
     '<label class="fl">Stage</label><select onchange="var v=this.value;lgSave(function(y){y.status=v;})">' + LG_ST.map(function (o) { return '<option' + (o === (x.status || 'New') ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select>' +
-    (mem.length ? '<label class="fl">Assigned to</label><select onchange="lgAssign(this.value)"><option value="">' + esc(x.ownerName || 'Unassigned') + '</option>' + mem.map(function (m) { return '<option value="' + m.id + '">' + esc(m.name || m.email) + '</option>'; }).join('') + '</select>' : (x.ownerName ? '<div class="small" style="margin-top:8px">👤 ' + esc(x.ownerName) + '</div>' : '')) +
+    (mem.length ? '<label class="fl">Move this lead to</label><select onchange="lgAssign(this.value)"><option value="">Choose a member…</option>' + mem.map(function (m) { return '<option value="' + m.id + '">' + esc(m.name || m.email) + '</option>'; }).join('') + '</select>' : (x.ownerName ? '<div class="small" style="margin-top:8px">👤 ' + esc(x.ownerName) + '</div>' : '')) +
     '<div class="mrow">' + (x.dispatch ? '<span class="au au-Active">With dispatch since ' + esc(x.dispatch.t.slice(0, 10)) + '</span>' : B('➡ Send to dispatch team', "if(confirm('Mark as onboarded and hand over to dispatch?'))lgSave(function(y){y.dispatch={t:new Date().toISOString(),by:lgMe()};y.status='Onboarded';(y.log=y.log||[]).push({type:'note',out:'Sent to dispatch',t:y.dispatch.t,by:lgMe()});})")) + '</div>' +
     '<h3 style="margin-top:16px">History</h3>' + ((x.log || []).slice(-15).reverse().map(function (g) { return '<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">' + esc(new Date(g.t).toLocaleString()) + ' · ' + esc(g.by || '') + ' · <b>' + esc(g.type) + '</b>: ' + esc(g.out || '') + '</div>'; }).join('') || '<div class="small">No activity yet.</div>');
 }
 function lgAssign(id) {
   var m = tCache.filter(function (y) { return y.id === id; })[0]; if (!m) return;
-  lgSave(function (y) { y.owner = m.id; y.ownerName = m.name || m.email; });
+  var l = getLeads(), x = lgLead(l); if (!x) return;
+  if (!confirm('Move this lead to ' + (m.name || m.email) + '? It will leave your list and appear in theirs.')) { lgRender(); return; }
+  lapi('assign', { userId: id, leads: [x] }).then(function (j) {
+    setLeads(l.filter(function (y) { return y.dot !== x.dot; })); $('lgmo').style.display = 'none'; renderLeads();
+    alert(j.added ? 'Lead moved to ' + (j.name || m.name) + '.' : 'They already have this lead, so nothing was changed.');
+  }).catch(function (e) { alert(e.message); lgRender(); });
 }
 function pipeMove(dot, v) { var l = getLeads(), x = l.filter(function (y) { return y.dot === dot; })[0]; if (x) { x.status = v; setLeads(l); renderPipe(); renderLeads(); } }
 function renderPipe() {
@@ -1980,14 +2011,16 @@ $('bassignbtn').onclick = function () {
   var id = $('bassign').value, m = tCache.filter(function (y) { return y.id === id; })[0];
   if (!m) { alert('Choose a team member first.'); return; }
   var t = bTargets(); if (!t.length) return;
-  var nm = m.name || m.email; if (!confirm('Assign ' + t.length + ' carriers to ' + nm + '?')) return;
+  var nm = m.name || m.email; if (!confirm('Send ' + t.length + ' carriers to ' + nm + '? They will appear in their own My Leads (and leave yours if you already saved them).')) return;
   var l = getLeads(), by = {}; l.forEach(function (x) { by[x.dot] = x; });
-  t.forEach(function (c) {
-    var x = by[c.dot];
-    if (!x) { x = { dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: c.authority || '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New', follow: '', note: '' }; l.push(x); by[c.dot] = x; }
-    x.owner = m.id; x.ownerName = nm;
+  var out = t.map(function (c) {
+    return by[c.dot] || { dot: c.dot, mc: c.mc, name: c.name, address: loc(c) === '—' ? '' : loc(c), authorized: c.authority || '—', common: '', units: c.powerUnits, email: c.email, phone: c.phone || c.cellPhone, officer: c.officer, status: 'New', follow: '', note: '' };
   });
-  setLeads(l); renderLeads(); bSel = {}; bRender(); alert(t.length + ' carriers assigned to ' + nm + '.');
+  lapi('assign', { userId: id, leads: out }).then(function (j) {
+    var gone = {}; out.forEach(function (x) { gone[x.dot] = 1; });
+    setLeads(l.filter(function (x) { return !gone[x.dot]; })); renderLeads(); bSel = {}; bRender();
+    alert(j.added + ' carriers sent to ' + (j.name || nm) + '.' + (j.skipped ? '\n' + j.skipped + ' were already in their list and were left as they are.' : ''));
+  }).catch(function (e) { alert(e.message); });
 };
 
 /* ---------------- Google Voice dialer extension bridge ---------------- */
@@ -2271,6 +2304,107 @@ $('tgCsv').onclick = function () {
   var rows = [['Member', 'Target emails/day', 'Target calls/day'].concat(tgRepData.days.map(function (d) { return d + ' (emails/calls)'; }), ['Days met', 'Total emails', 'Total calls', 'Result']).map(q).join(',')];
   tgRepData.members.forEach(function (m) { rows.push([m.name, m.target.emails, m.target.calls].concat(m.per.map(function (x) { return x.e + '/' + x.c + (x.open ? ' (in progress)' : x.met ? ' met' : ' missed'); }), [m.daysMet + '/' + m.counted, m.totalE, m.totalC, m.achieved === null ? '-' : m.achieved ? 'Target met' : 'Not met']).map(q).join(',')); });
   dl('weekly-report-' + tgRepData.weekStart + '.csv', rows.join('\n'));
+};
+
+/* ================= separate leads, Team Leads (owner), auto-count, new popup ================= */
+function lapi(action, data) {
+  if (guest || !session) return Promise.reject(new Error('Please log in first.'));
+  return fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify(Object.assign({ action: action }, data || {})) })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Error ' + r.status + (r.status === 404 ? ' (api/leads.js is not deployed yet)' : ''))); return j; }); });
+}
+/* one-time: the old shared list lived in every browser; keep only the leads that belong to this person */
+function tgSepInit() {
+  var key = 'cd_sep1_' + tMe.id;
+  try { if (localStorage.getItem(key)) return; } catch (e) {}
+  var l = getLeads().filter(function (x) { return x.owner === tMe.id || (!x.owner && tMe.is_owner); });
+  l.forEach(function (x) { delete x.owner; delete x.ownerName; });
+  _setLeads(l);
+  try { localStorage.setItem(key, '1'); } catch (e) {}
+}
+/* views */
+var _sv2 = showView;
+showView = function (v) {
+  _sv2(v);
+  $('viewTL').style.display = v === 'tl' ? '' : 'none';
+  if (v === 'tl') tlInit();
+};
+/* Team Leads (owner only, read-only) */
+var tlRows = [], tlTotal = 0, tlInited = false;
+function tlInit() {
+  if (!tlInited) {
+    tlInited = true;
+    $('tlSt').innerHTML = '<option value="">Any status</option>' + (window.LG_ST || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('');
+  }
+  tlLoad(true);
+}
+function tlLoad(reset) {
+  if (reset) { tlRows = []; $('tlList').innerHTML = '<p class="small" style="padding:12px">Loading…</p>'; }
+  lapi('team_list', { member: $('tlMem').value, status: $('tlSt').value, q: $('tlQ').value, offset: tlRows.length }).then(function (j) {
+    var cur = $('tlMem').value;
+    $('tlMem').innerHTML = '<option value="">All members</option>' + j.members.map(function (m) { return '<option value="' + m.id + '"' + (m.id === cur ? ' selected' : '') + '>' + esc(m.name) + (m.role === 'admin' ? ' (admin)' : '') + '</option>'; }).join('');
+    tlRows = tlRows.concat(j.rows); tlTotal = j.total; tlDraw();
+  }).catch(function (e) { $('tlList').innerHTML = '<p class="small" style="padding:12px;color:#dc2626">' + esc(e.message) + '</p>'; });
+}
+function tlDraw() {
+  $('tlInfo').textContent = tlTotal + ' lead(s) found · showing ' + tlRows.length;
+  $('tlMore').style.display = tlRows.length < tlTotal ? '' : 'none';
+  $('tlList').innerHTML = tlRows.length ? '<table style="min-width:820px"><thead><tr><th>Member</th><th>Company</th><th>MC</th><th>Phone</th><th>Status</th><th>Follow-up</th><th>Last activity</th></tr></thead><tbody>' + tlRows.map(function (r, i) {
+    var d = r.data || {}, lg = (d.log || []).slice(-1)[0];
+    return '<tr style="cursor:pointer" onclick="tlOpen(' + i + ')"><td>' + esc(r.member) + '</td><td>' + esc(d.name || '') + '</td><td>' + esc(d.mc || '') + '</td><td>' + esc(d.phone || '') + '</td><td>' + esc(d.status || 'New') + '</td><td>' + esc(d.follow || '') + '</td><td>' + (lg ? esc(lg.type) + ' · ' + esc(new Date(lg.t).toLocaleDateString()) : '<span class="small">—</span>') + '</td></tr>';
+  }).join('') + '</tbody></table>' : '<p class="small" style="padding:12px">No leads found.</p>';
+}
+$('tlGo').onclick = function () { tlLoad(true); };
+$('tlQ').onkeydown = function (e) { if (e.key === 'Enter') tlLoad(true); };
+$('tlMore').onclick = function () { tlLoad(false); };
+function tlOpen(i) {
+  var r = tlRows[i]; if (!r) return; var d = r.data || {};
+  var mo = $('tlmo');
+  if (!mo) { mo = document.createElement('div'); mo.className = 'mo'; mo.id = 'tlmo'; document.body.appendChild(mo); }
+  var log = (d.log || []).slice().reverse().map(function (g) { return '<div class="small" style="padding:3px 0;border-bottom:1px solid var(--line)">' + esc(new Date(g.t).toLocaleString()) + ' · ' + esc(g.by || '') + ' · <b>' + esc(g.type) + '</b>: ' + esc(g.out || '') + '</div>'; }).join('') || '<div class="small">No activity yet.</div>';
+  mo.innerHTML = '<div class="mbox" style="max-width:520px;max-height:85vh;overflow:auto"><h3 style="margin:0 0 4px">' + esc(d.name || '') + '</h3><div class="small">Lead of <b>' + esc(r.member) + '</b> · MC ' + esc(d.mc || '') + ' · DOT ' + esc(r.dot) + '</div>' +
+    '<p class="small" style="margin:8px 0">' + esc(d.address || '') + '<br>📞 ' + esc(d.phone || '—') + ' · ✉️ ' + esc(d.email || '—') + '<br>Status: <b>' + esc(d.status || 'New') + '</b>' + (d.follow ? ' · Follow-up: ' + esc(d.follow) : '') + '</p>' +
+    (d.note ? '<div class="notice" style="margin:6px 0">' + esc(d.note) + '</div>' : '') + '<b>Activity</b>' + log + '<div style="text-align:right;margin-top:12px"><button type="button" onclick="document.getElementById(\'tlmo\').style.display=\'none\'">Close</button></div></div>';
+  mo.style.display = 'flex';
+}
+
+/* auto-count calls: any call button inside CarrierDesk counts once (Google Voice "Dialed" is already counted through the lead log) */
+var tgLastCall = {};
+document.addEventListener('click', function (e) {
+  var a = e.target.closest ? e.target.closest('a[data-gv],a[href^="tel:"]') : null; if (!a) return;
+  if (a.getAttribute('data-gv') && a.getAttribute('data-dot')) return;
+  var k = a.getAttribute('data-gv') || a.getAttribute('href'), now = Date.now();
+  if (tgLastCall[k] && now - tgLastCall[k] < 15000) return;
+  tgLastCall[k] = now; tgEvent('call');
+}, true);
+/* outcomes picked after a call do not count again: only the dial itself counts */
+lgAdd = (function (prev) {
+  return function (dot, e) {
+    if (e && e.type === 'call' && e.out !== 'Dialed') { var st = tgState; tgState = null; try { prev(dot, e); } finally { tgState = st; } return; }
+    prev(dot, e);
+  };
+})(lgAdd);
+
+/* professional daily popup (US Eastern) */
+tgPopup = function () {
+  if (!tgState || !tgState.show) return;
+  var key = 'cd_tgmsg_' + tgUid + '_' + tgState.day;
+  try { if (localStorage.getItem(key)) return; } catch (e) {}
+  var tz = tgState.tz || 'America/New_York', now = new Date();
+  var hr = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(now), 10) % 24;
+  var hello = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+  var dstr = new Date(tgState.day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  var tstr = now.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  var bar = function (label, o) { var ok = o.done >= o.target; return '<div class="tgrow"><span>' + label + '</span><span>' + o.done + ' / ' + o.target + (ok ? ' ✅' : '') + '</span></div><div class="tgb"><i class="' + (ok ? 'ok' : '') + '" style="width:' + tgPct(o.done, o.target) + '%"></i></div>'; };
+  var mo = $('tgmo');
+  if (!mo) { mo = document.createElement('div'); mo.className = 'mo'; mo.id = 'tgmo'; document.body.appendChild(mo); }
+  mo.innerHTML = '<div class="mbox tgpop"><div class="tgph"><div class="d">' + esc(dstr) + '</div><div class="t">US Eastern Time · ' + esc(tstr) + '</div></div><div class="tgpb">' +
+    '<h3>' + hello + ', ' + esc((tgState.name || '').split(' ')[0] || 'team') + '</h3><div class="small">Here is your target for today.</div>' +
+    '<div class="tgg"><div><span style="font-size:20px">📧</span><b>' + tgState.emails.target + '</b><small>Emails</small></div><div><span style="font-size:20px">📞</span><b>' + tgState.calls.target + '</b><small>Calls</small></div></div>' +
+    '<div style="text-align:left">' + bar('Emails sent', tgState.emails) + bar('Calls made', tgState.calls) + '</div>' +
+    '<p class="small" style="margin:8px 0 14px">Progress is counted automatically when you email or call carriers from CarrierDesk. Your day resets at 12:00 AM US Eastern Time.</p>' +
+    '<button type="button" class="go" id="tgOk" style="width:100%;padding:12px">Start my day</button></div></div>';
+  mo.style.display = 'flex';
+  $('tgOk').onclick = function () { mo.style.display = 'none'; try { localStorage.setItem(key, '1'); } catch (e) {} };
 };
 </script>
 </body>
