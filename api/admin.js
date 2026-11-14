@@ -2,7 +2,7 @@
 const { sb, getUser, SB_URL, SB_KEY } = require('./_mail');
 
 // tables that have a user_id column (missing tables are ignored)
-const USER_TABLES = ['campaign_recipients', 'campaigns', 'skip_list', 'issues'];
+const USER_TABLES = ['campaign_recipients', 'campaigns', 'skip_list', 'issues', 'team_targets', 'activity_daily'];
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
