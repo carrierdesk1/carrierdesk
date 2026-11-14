@@ -2314,11 +2314,14 @@ function lapi(action, data) {
 }
 /* one-time: the old shared list lived in every browser; keep only the leads that belong to this person */
 function tgSepInit() {
-  var key = 'cd_sep1_' + tMe.id;
+  var key = 'cd_sep2_' + tMe.id;
   try { if (localStorage.getItem(key)) return; } catch (e) {}
-  var l = getLeads().filter(function (x) { return x.owner === tMe.id || (!x.owner && tMe.is_owner); });
+  /* never delete anything: keep a backup, and only drop leads that clearly belong to someone else */
+  var all = getLeads();
+  try { localStorage.setItem('cd_bak_' + leadsKey(), JSON.stringify(all)); } catch (e) {}
+  var l = all.filter(function (x) { return !x.owner || x.owner === tMe.id; });
   l.forEach(function (x) { delete x.owner; delete x.ownerName; });
-  _setLeads(l);
+  if (l.length !== all.length) _setLeads(l);
   try { localStorage.setItem(key, '1'); } catch (e) {}
 }
 /* views */
