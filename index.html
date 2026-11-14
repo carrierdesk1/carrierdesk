@@ -521,6 +521,15 @@ a.pl-wa:hover{background:linear-gradient(135deg,#c81e25,#96101a)}
 a.pl-ct{display:block;border:1.5px solid #d91f26;color:#d91f26;background:#fff;border-radius:11px;padding:10px;font-weight:700;text-decoration:none}
 a.pl-ct:hover{background:#fff1f1;text-decoration:none}
 .pl-card ul{margin-bottom:0}
+
+.rk-score{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:10px}
+.rk-n{font-size:34px;font-weight:800;line-height:1;min-width:64px;text-align:center;padding:8px 10px;border-radius:14px;color:#fff}
+.rk-n.g{background:#16a34a}.rk-n.y{background:#d97706}.rk-n.r{background:#d91f26}
+.rk-bar{flex:1 0 100%;height:8px;border-radius:8px;background:#f1e3e3;overflow:hidden}.rk-bar i{display:block;height:100%;border-radius:8px;background:#d91f26;transition:width .6s}
+.rk-bar.g i{background:#16a34a}.rk-bar.y i{background:#d97706}
+.rk-why{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.avc{cursor:pointer;border:1px solid #f3c4c6;background:#fff1f1;color:#b3121a;border-radius:99px;padding:4px 12px;font-weight:700;font-size:13px}
+.avc.on{background:#d91f26;color:#fff;border-color:#d91f26}
 </style>
 </head>
 <body>
@@ -579,6 +588,7 @@ a.pl-ct:hover{background:#fff1f1;text-decoration:none}
       <a href="#" data-view="leads"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>My Leads<span class="bd" id="leadBadge">0</span></a>
       <a href="#" data-view="tl" id="navTL" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.2a5 5 0 0 1 4.5 5.3"/></svg>Team Leads</a>
       <a href="#" data-view="track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Carrier Tracker</a>
+      <a href="#" data-view="avail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg>Availability</a>
       <a href="#" data-view="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Documents</a>
       <a href="#" data-view="pipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>Pipeline</a>
       <a href="#" data-view="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>AI Assistant</a>
@@ -769,6 +779,14 @@ a.pl-ct:hover{background:#fff1f1;text-decoration:none}
 <textarea id="iIn" placeholder="Describe the problem…"></textarea>
 <div class="cdrow"><button type="button" class="go" id="iGo">Send report</button><button type="button" class="btn-o" id="iWa">Send on WhatsApp</button><span id="iMsg" class="small"></span></div>
 </div></section>
+<section id="viewAvail" class="pad" style="display:none;margin-top:24px"><div class="cdbox">
+<h3>Truck availability</h3>
+<p class="small" style="margin:0 0 10px">See which of your carriers have an empty truck, and where. Pick a lead, enter where and when the truck is free.</p>
+<div class="cdrow"><input id="avLead" list="avDl" placeholder="Carrier (type name or DOT)" style="flex:2;min-width:200px"><datalist id="avDl"></datalist><input id="avWhere" placeholder="City, ST (e.g. Dallas, TX)" style="min-width:170px"><input id="avDate" type="date"><input id="avEq" placeholder="Equipment (dry van, reefer…)" style="min-width:170px"><input id="avNote" placeholder="Notes / rate" style="min-width:150px"><button type="button" class="go" id="avAdd">Set available</button></div>
+<div class="small" id="avMsg" style="margin:4px 0 8px"></div>
+<div class="cdrow"><select id="avSt"><option value="">All states</option></select><input id="avQ" placeholder="Search carrier, city, equipment…" style="flex:1;min-width:180px"><span id="avCnt" class="small"></span></div>
+<div id="avChips" class="cdrow" style="margin-top:0"></div>
+<div class="bw"><div id="avList"></div></div></div></section>
 <section id="viewLeads" class="pad" style="display:none;margin-top:24px">
       <h3>My leads</h3>
       <div class="mlbar"><b>✉ Send email</b><span class="small" id="mlInfo"></span><button type="button" class="btn-o" id="mlVerify">✅ Verify emails</button><button type="button" class="mln" data-n="20">20 emails</button><button type="button" class="mln" data-n="25">25 emails</button><button type="button" class="mln" data-n="50">50 emails</button></div>
@@ -2904,13 +2922,13 @@ $('mlVerify').onclick=function(){
 
 /* ===== plans: tiers, pricing popup, limits ===== */
 var PLAN_TIERS = [
-  { key: 'basic', name: 'Basic', tag: 'THE ESSENTIALS', price: 36, desc: 'For dispatchers building their carrier outreach.', emails: Infinity, leads: 300, docs: false, ai: false, verify: false, track: false, pipe: false, fuel: false,
-    feats: ['Built-in carrier database with bulk search filters', 'Email carriers through Gmail', 'Daily new-carrier alerts (saved searches)', 'Insurance and authority check', 'Skip list and CSV export', '~A/B email testing'] },
-  { key: 'standard', name: 'Standard', tag: 'MOST POPULAR', price: 50, pop: 1, desc: 'For dispatchers who email and follow up every day.', emails: Infinity, leads: 1500, docs: true, ai: false, verify: true, track: true, pipe: false, fuel: true,
-    feats: ['Everything in Basic, plus:', 'Email list verification and auto-clean of My Leads', 'Live call and carrier tracking', 'Carrier documents (W-9, MC letter, dispatch agreement)', 'Fuel and route calculator', 'Priority support', '~Automatic mailbox warmup'] },
-  { key: 'premium', name: 'Premium', tag: 'TOOLS + GUIDANCE', price: 92, desc: 'For busy dispatchers who want hands-on direction.', emails: Infinity, leads: 5000, docs: true, ai: true, verify: true, track: true, pipe: false, fuel: true,
+  { key: 'basic', name: 'Basic', tag: 'THE ESSENTIALS', price: 36, desc: 'For dispatchers building their carrier outreach.', emails: Infinity, leads: 300, docs: false, ai: false, verify: false, track: false, pipe: false, fuel: false, avail: false,
+    feats: ['Built-in carrier database with bulk search filters', 'Email carriers through Gmail', 'Daily new-carrier alerts (saved searches)', 'Insurance and authority check', 'Carrier score and risk check', 'Skip list and CSV export', '~A/B email testing'] },
+  { key: 'standard', name: 'Standard', tag: 'MOST POPULAR', price: 50, pop: 1, desc: 'For dispatchers who email and follow up every day.', emails: Infinity, leads: 1500, docs: true, ai: false, verify: true, track: true, pipe: false, fuel: true, avail: true,
+    feats: ['Everything in Basic, plus:', 'Email list verification and auto-clean of My Leads', 'Live call and carrier tracking', 'Carrier documents (W-9, MC letter, dispatch agreement)', 'Truck availability board', 'Fuel and route calculator', 'Priority support', '~Automatic mailbox warmup'] },
+  { key: 'premium', name: 'Premium', tag: 'TOOLS + GUIDANCE', price: 92, desc: 'For busy dispatchers who want hands-on direction.', emails: Infinity, leads: 5000, docs: true, ai: true, verify: true, track: true, pipe: false, fuel: true, avail: true,
     feats: ['Everything in Standard, plus:', 'AI Assistant for dispatch questions', 'Personal coaching', 'Email campaign guidance', 'Data management guidance', 'Follow-up strategies'] },
-  { key: 'broker', name: 'Broker', tag: 'FOR FREIGHT TEAMS', price: 240, desc: 'For brokers connecting loads with carrier capacity.', emails: Infinity, leads: Infinity, docs: true, ai: true, verify: true, track: true, pipe: true, fuel: true,
+  { key: 'broker', name: 'Broker', tag: 'FOR FREIGHT TEAMS', price: 240, desc: 'For brokers connecting loads with carrier capacity.', emails: Infinity, leads: Infinity, docs: true, ai: true, verify: true, track: true, pipe: true, fuel: true, avail: true,
     feats: ['Everything in Premium, plus:', 'Full carrier database access', 'Pipeline: offer, delivery and filter tracking', '~Bulk load offers to carriers'] }
 ];
 function tierOf(k) { return PLAN_TIERS.filter(function (t) { return t.key === k; })[0] || Object.assign({}, PLAN_TIERS[3], { key: 'legacy', name: 'Pro' }); } /* paid accounts without a tier = Premium */
@@ -2921,7 +2939,7 @@ planInfo = function () {
   if (p.pro && tMe && !tMe.approved && tMe.plan === 'paid') { p.tier = tierOf(tMe.plan_tier); p.label = 'Pro ' + p.tier.name + ' · ' + p.d + ' days left'; }
   return p;
 };
-function planTier() { return planInfo().tier || { emails: Infinity, leads: Infinity, docs: true, ai: true, verify: true, track: true, pipe: true, fuel: true, name: 'Team' }; }
+function planTier() { return planInfo().tier || { emails: Infinity, leads: Infinity, docs: true, ai: true, verify: true, track: true, pipe: true, fuel: true, avail: true, name: 'Team' }; }
 function emKey() { return 'cd_em_' + (session && session.user ? session.user.id : 'g') + '_' + new Date().toISOString().slice(0, 10); }
 function emUsed() { try { return parseInt(localStorage.getItem(emKey()), 10) || 0; } catch (e) { return 0; } }
 function emInc(n) { try { localStorage.setItem(emKey(), emUsed() + n); } catch (e) {} }
@@ -2944,6 +2962,7 @@ upOpen = function (reason) {
     verify: '<b>Email verification is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.',
     pipe: '<b>The Pipeline is not included in your ' + T.name + ' plan.</b> Upgrade to Broker to use it.',
     fuel: '<b>The Fuel & Map calculator is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.',
+    avail: '<b>The Truck availability board is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.',
     track: '<b>Live carrier tracking is not included in your ' + T.name + ' plan.</b> Upgrade to Standard or higher.'
   };
   $('upmo').querySelector('h3').textContent = 'Choose your plan';
@@ -2966,7 +2985,7 @@ function plSel(el) { Array.prototype.forEach.call(document.querySelectorAll('.pl
 function navLocks() {
   var T = planTier();
   Array.prototype.forEach.call(document.querySelectorAll('.side nav a[data-view]'), function (a) {
-    var k = a.getAttribute('data-view'), lock = ['ai', 'verify', 'track', 'pipe', 'fuel', 'docs'].indexOf(k) > -1 && !T[k], l = a.querySelector('.lk');
+    var k = a.getAttribute('data-view'), lock = ['ai', 'verify', 'track', 'pipe', 'fuel', 'docs', 'avail'].indexOf(k) > -1 && !T[k], l = a.querySelector('.lk');
     if (lock) { a.setAttribute('data-lock', '1'); if (!l) { l = document.createElement('span'); l.className = 'lk'; l.textContent = '🔒'; a.appendChild(l); } }
     else { a.removeAttribute('data-lock'); if (l) l.remove(); }
   });
@@ -3000,6 +3019,113 @@ var _sv9 = showView;
 showView = function (v) { var T = planTier(); if (v === 'ai' && !T.ai) { upOpen('ai'); return; } if (v === 'verify' && !T.verify) { upOpen('verify'); return; } if (v === 'track' && !T.track) { upOpen('track'); return; } if (v === 'pipe' && !T.pipe) { upOpen('pipe'); return; } if (v === 'fuel' && !T.fuel) { upOpen('fuel'); return; } if (v === 'docs' && !T.docs) { upOpen('docs'); return; } _sv9(v); };
 var _mv9 = $('mlVerify').onclick;
 $('mlVerify').onclick = function () { if (!planTier().verify) { upOpen('verify'); return; } return _mv9.apply(this, arguments); };
+
+/* ===== carrier score + risk check ===== */
+function rkDig(x) { return String(x || '').replace(/\D/g, '').slice(-10); }
+function rkSt(a) { var m = String(a || '').match(/,\s*([A-Z]{2})\b/); return m ? m[1] : ''; }
+function rkFlags(c) {
+  var f = [], pool = (window.bulk || []).concat(getLeads()), me = String(c.dot);
+  var ph = [rkDig(c.phone), rkDig(c.cellPhone)].filter(function (x) { return x.length === 10; }), em = String(c.email || '').trim().toLowerCase();
+  var off = String(c.officer1 || '').trim().toLowerCase();
+  var sp = {}, se = {}, so = {};
+  pool.forEach(function (o) {
+    if (!o || String(o.dot) === me) return;
+    var k = String(o.dot);
+    if (ph.length && [rkDig(o.phone), rkDig(o.cellPhone)].some(function (x) { return x && ph.indexOf(x) > -1; })) sp[k] = 1;
+    if (em && String(o.email || '').trim().toLowerCase() === em) se[k] = 1;
+    if (off.length > 5 && String(o.officer || o.officer1 || '').trim().toLowerCase() === off) so[k] = 1;
+  });
+  var np = Object.keys(sp).length, ne = Object.keys(se).length, no = Object.keys(so).length;
+  if (np) f.push([np > 1 ? 'bad' : 'warn', 'Same phone on ' + np + ' other carrier' + (np > 1 ? 's' : '') + ' in your data']);
+  if (ne) f.push([ne > 1 ? 'bad' : 'warn', 'Same email on ' + ne + ' other carrier' + (ne > 1 ? 's' : '') + ' in your data']);
+  if (no) f.push(['warn', 'Same officer name on ' + no + ' other carrier' + (no > 1 ? 's' : '')]);
+  var since = ccDate(c.authSince || c.censusAddDate), mo = since ? Math.floor((Date.now() - since.getTime()) / 2629800000) : null;
+  if (mo !== null && mo < 12 && /@(gmail|yahoo|outlook|hotmail|aol|icloud|proton(mail)?)\./i.test(em)) f.push(['warn', 'New authority with a free email address']);
+  if (/p\.?\s?o\.?\s?box|\bpmb\b|ups store|mailbox/i.test((c.address || '') + ' ' + (c.mailing || ''))) f.push(['warn', 'PO box or mailbox-store address']);
+  var s1 = rkSt(c.address), s2 = rkSt(c.mailing);
+  if (s1 && s2 && s1 !== s2) f.push(['warn', 'Mailing state (' + s2 + ') differs from physical (' + s1 + ')']);
+  if (!c.phone && !c.cellPhone) f.push(['warn', 'No phone number on file']);
+  if (c.insDetail && c.insDetail.cancel) f.push(['bad', 'Insurance cancellation filed (' + c.insDetail.cancel + ')']);
+  return f;
+}
+function cdScore(c) {
+  var s = 100, w = [], i = c.insurance || {}, n = ins(c);
+  var d = function (x, t) { s -= x; w.push(t + ' −' + x); };
+  if (c.authUnverified) d(10, 'Authority not verified'); else if (!c.authorized) d(40, 'Not authorized'); else if (c.common !== 'Active') d(30, 'Authority inactive');
+  if (c.oos) d(30, 'Out of service');
+  if (c.fromCensusOnly && !(i.bipdOnFile > 0)) d(8, 'Insurance not verified'); else if (n.bad) d(25, 'No insurance'); else if (i.bipdRequired && i.bipdOnFile < i.bipdRequired) d(10, 'Insurance below required');
+  var sr = String(c.safetyRating || ''); if (/^u/i.test(sr)) d(30, 'Unsatisfactory safety'); else if (/^c/i.test(sr)) d(15, 'Conditional safety');
+  var since = ccDate(c.authSince || c.censusAddDate), mo = since ? Math.floor((Date.now() - since.getTime()) / 2629800000) : null;
+  if (mo !== null) { if (mo < 6) d(15, 'Authority under 6 months'); else if (mo < 12) d(8, 'Authority under 1 year'); }
+  var cr = c.crashTotal || 0; if (cr >= 5) d(15, cr + ' crashes'); else if (cr > 0) d(5, cr + ' crash' + (cr > 1 ? 'es' : ''));
+  if (parseFloat(c.vehicleOosRate) > 30) d(10, 'High vehicle out-of-service rate');
+  if (!(c.powerUnits > 0)) d(8, 'No power units');
+  rkFlags(c).forEach(function (x) { d(x[0] === 'bad' ? 10 : 5, x[1]); });
+  s = Math.max(0, Math.min(100, s));
+  return { s: s, w: w, g: s >= 85 ? ['A', 'Low risk', 'g'] : s >= 70 ? ['B', 'Fairly safe', 'g'] : s >= 55 ? ['C', 'Medium risk', 'y'] : ['D', 'High risk', 'r'] };
+}
+var _ccF9 = ccFlags;
+ccFlags = function (c) {
+  var r = cdScore(c), rk = rkFlags(c);
+  var head = '<div class="rk-score"><div class="rk-n ' + r.g[2] + '">' + r.s + '</div><div><b>Carrier score: ' + r.g[1] + ' (' + r.g[0] + ')</b><div class="small">Out of 100, from authority, insurance, safety, age and risk signals.</div></div>' +
+    '<div class="rk-bar ' + r.g[2] + '"><i style="width:' + r.s + '%"></i></div>' +
+    (r.w.length ? '<div class="rk-why">' + r.w.map(function (x) { return '<span class="cc-chip cc-warn">' + esc(x) + '</span>'; }).join('') + '</div>' : '') + '</div>';
+  var risk = '<div class="cc-sec">Risk check</div>' + (rk.length ? '<div class="cc-flags">' + rk.map(function (x) { return '<span class="cc-chip cc-' + x[0] + '">' + (x[0] === 'bad' ? '⚠ ' : '') + esc(x[1]) + '</span>'; }).join('') + '</div>' : '<div class="cc-flags"><span class="cc-chip cc-ok">✔ No fraud signals found</span></div>') +
+    '<p class="small" style="margin:-4px 0 8px">Compared with your bulk results and saved leads. FMCSA does not publish a history of phone, email or address changes.</p>';
+  return head + _ccF9(c) + risk;
+};
+var _ccFl9 = ccFleet;
+ccFleet = function (c) {
+  var h = '';
+  if (c.vehicleInsp != null || c.driverInsp != null) {
+    var pc = function (v) { return v == null || v === '' ? '—' : parseFloat(v).toFixed(1) + '%'; };
+    h = '<div class="cc-sec">Inspections &amp; out-of-service</div><table class="cc-tbl"><tr><th></th><th>Inspections</th><th>Out of service</th><th>OOS rate</th></tr>' +
+      '<tr><td>Vehicle</td><td>' + (c.vehicleInsp || 0) + '</td><td>' + (c.vehicleOosInsp || 0) + '</td><td>' + pc(c.vehicleOosRate) + '</td></tr>' +
+      '<tr><td>Driver</td><td>' + (c.driverInsp || 0) + '</td><td>' + (c.driverOosInsp || 0) + '</td><td>' + pc(c.driverOosRate) + '</td></tr></table>';
+  }
+  if (c.insDetail) h += '<div class="cc-sec">Insurance details</div><div class="cc-g">' + ccF('Insurer', c.insDetail.insurer) + ccF('Policy effective', c.insDetail.effective) + ccF('Cancellation filed', c.insDetail.cancel || 'None') + '</div>';
+  return h + _ccFl9(c);
+};
+/* ===== truck availability board ===== */
+function avSt(w) { var m = String(w || '').match(/,\s*([A-Za-z]{2})\s*$/); return m ? m[1].toUpperCase() : ''; }
+function avToday() { return new Date().toISOString().slice(0, 10); }
+function avRender() {
+  var all = getLeads().filter(lgMine), l = all.filter(function (x) { return x.avail; }), today = avToday();
+  $('avDl').innerHTML = all.map(function (x) { return '<option value="' + esc(x.name) + ' · ' + esc(x.dot) + '"></option>'; }).join('');
+  var cnt = {}; l.forEach(function (x) { var k = avSt(x.avail.where) || '—'; cnt[k] = (cnt[k] || 0) + 1; });
+  var fs = $('avSt').value, q = $('avQ').value.trim().toLowerCase();
+  $('avSt').innerHTML = '<option value="">All states</option>' + Object.keys(cnt).sort().map(function (k) { return '<option' + (k === fs ? ' selected' : '') + '>' + k + '</option>'; }).join('');
+  $('avChips').innerHTML = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; }).map(function (k) { return '<button type="button" class="avc' + (k === fs ? ' on' : '') + '" onclick="$(\'avSt\').value=\'' + (k === fs ? '' : k) + '\';avRender()">' + k + ' · ' + cnt[k] + '</button>'; }).join('');
+  var rows = l.filter(function (x) {
+    var a = x.avail; if (fs && (avSt(a.where) || '—') !== fs) return false;
+    return !q || (x.name + ' ' + x.dot + ' ' + x.mc + ' ' + a.where + ' ' + a.eq + ' ' + a.note).toLowerCase().indexOf(q) > -1;
+  }).sort(function (a, b) { return String(a.avail.date).localeCompare(String(b.avail.date)); });
+  $('avCnt').textContent = rows.length + ' truck(s) available';
+  if (!rows.length) { $('avList').innerHTML = '<p class="small" style="padding:16px">No trucks listed yet. Pick a carrier above and press Set available.</p>'; return; }
+  $('avList').innerHTML = '<table><tr><th>Carrier</th><th>Location</th><th>Equipment</th><th>Free on</th><th>Notes</th><th>Contact</th><th></th></tr>' + rows.map(function (x) {
+    var a = x.avail, ph = String(x.phone || '').replace(/\D/g, ''), wa = ph.length === 10 ? '1' + ph : ph;
+    var b = a.date === today ? '<span class="au au-Active">Today</span>' : a.date && a.date < today ? '<span class="au au-Unknown">Past ' + esc(a.date) + '</span>' : '<span class="au au-Pending">' + esc(a.date || '—') + '</span>';
+    return '<tr><td><b>' + esc(x.name) + '</b><br><span class="small">MC ' + esc(x.mc) + ' / DOT ' + esc(x.dot) + '</span></td><td>' + esc(a.where) + '</td><td>' + esc(a.eq || '—') + '</td><td>' + b + '</td><td>' + esc(a.note || '') + '</td><td>' +
+      (ph ? '<a class="ib" href="tel:' + ph + '">📞</a><a class="ib" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">💬</a>' : '') + (x.email ? '<a class="ib" href="mailto:' + esc(x.email) + '">✉</a>' : '') +
+      '</td><td><button type="button" onclick="avEdit(\'' + esc(x.dot) + '\')">Edit</button> <button type="button" onclick="avDone(\'' + esc(x.dot) + '\')">Booked</button></td></tr>';
+  }).join('') + '</table>';
+}
+function avFind(v) { var d = String(v || '').split(' · ').pop().trim(); return getLeads().filter(function (x) { return lgMine(x) && (String(x.dot) === d || String(x.dot) === String(v).trim()); })[0]; }
+$('avAdd').onclick = function () {
+  var x = avFind($('avLead').value), w = $('avWhere').value.trim();
+  if (!x) { $('avMsg').textContent = 'Pick a carrier from your leads first.'; return; }
+  if (!avSt(w)) { $('avMsg').textContent = 'Enter the location as City, ST (for example Dallas, TX).'; return; }
+  var l = getLeads(); l.forEach(function (y) { if (y.dot === x.dot) y.avail = { where: w, date: $('avDate').value || avToday(), eq: $('avEq').value.trim(), note: $('avNote').value.trim() }; });
+  setLeads(l); $('avMsg').textContent = '✅ ' + x.name + ' is now listed.'; ['avLead', 'avWhere', 'avEq', 'avNote'].forEach(function (k) { $(k).value = ''; }); avRender();
+};
+function avEdit(dot) { var x = avFind(dot); if (!x || !x.avail) return; $('avLead').value = x.name + ' · ' + x.dot; $('avWhere').value = x.avail.where; $('avDate').value = x.avail.date; $('avEq').value = x.avail.eq || ''; $('avNote').value = x.avail.note || ''; window.scrollTo(0, 0); }
+function avDone(dot) { var l = getLeads(); l.forEach(function (y) { if (String(y.dot) === String(dot)) delete y.avail; }); setLeads(l); avRender(); }
+$('avSt').onchange = avRender; $('avQ').addEventListener('input', avRender); $('avDate').value = avToday();
+var _sv10 = showView;
+showView = function (v) {
+  if (v === 'avail' && !planTier().avail) { upOpen('avail'); return; }
+  _sv10(v); $('viewAvail').style.display = v === 'avail' ? '' : 'none'; if (v === 'avail') avRender();
+};
 </script>
 </body>
 </html>
