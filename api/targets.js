@@ -1,10 +1,10 @@
 // POST /api/targets { action, ... }
 // Members:  me, event{kind:'email'|'call'}
 // Admin:    team, set{userId|'all', emails, calls}, weekly{offset:0|-1|-2}
-// Day = TARGET_TZ (default Asia/Karachi). Default target = DEFAULT_EMAIL_TARGET / DEFAULT_CALL_TARGET (100 / 100).
+// Day = TARGET_TZ (default America/New_York = US Eastern, resets at 12:00 AM ET). Default target = DEFAULT_EMAIL_TARGET / DEFAULT_CALL_TARGET (100 / 100).
 const { sb, getUser } = require('./_mail');
 
-const TZ = process.env.TARGET_TZ || 'Asia/Karachi';
+const TZ = process.env.TARGET_TZ || 'America/New_York';
 const DEF = { emails: parseInt(process.env.DEFAULT_EMAIL_TARGET || '100', 10), calls: parseInt(process.env.DEFAULT_CALL_TARGET || '100', 10) };
 const dayOf = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d || new Date()); // YYYY-MM-DD
 const addDays = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
@@ -33,7 +33,7 @@ async function meState(user) {
   if (!m) return { show: false };
   const day = dayOf();
   const p = ((await progress(day, day))[user.id] || {})[day] || { e: 0, c: 0 };
-  return { show: true, day, name: m.name, emails: { done: p.e, target: m.target.emails }, calls: { done: p.c, target: m.target.calls } };
+  return { show: true, day, tz: TZ, name: m.name, emails: { done: p.e, target: m.target.emails }, calls: { done: p.c, target: m.target.calls } };
 }
 
 module.exports = async (req, res) => {

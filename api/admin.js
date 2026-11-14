@@ -2,7 +2,7 @@
 const { sb, getUser, SB_URL, SB_KEY } = require('./_mail');
 
 // tables that have a user_id column (missing tables are ignored)
-const USER_TABLES = ['campaign_recipients', 'campaigns', 'skip_list', 'issues', 'team_targets', 'activity_daily'];
+const USER_TABLES = ['campaign_recipients', 'campaigns', 'skip_list', 'issues', 'team_targets', 'activity_daily', 'user_leads'];
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -28,6 +28,7 @@ module.exports = async (req, res) => {
     for (const t of USER_TABLES) {
       try { await sb(t + '?user_id=eq.' + id, { method: 'DELETE' }); } catch (e) { if (!/42P01|404|does not exist/i.test(e.message)) failed.push(t); }
     }
+    try { await sb('team_leads?owner=eq.' + id, { method: 'DELETE' }); } catch (e) { /* table or column missing */ }
     // 2) login account
     const key = SB_KEY();
     const r = await fetch(SB_URL() + '/auth/v1/admin/users/' + id, { method: 'DELETE', headers: { apikey: key, Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(15000) });
