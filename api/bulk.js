@@ -372,7 +372,8 @@ function censusFilter(q, mode, f, t, from, to) {
     p.push('mc_n=gte.' + f, 'mc_n=lte.' + t);
   } else {
     p.push('add_date=gte.' + from, 'add_date=lt.' + nextDay(to));
-    p.push('mc_n=not.is.null');
+    // New carriers have no MC in the census file yet (it is resolved from the authority data below), so only older ranges require mc_n
+    if (to < new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)) p.push('mc_n=not.is.null');
   }
   const stList = String(q.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
   if (stList.length) p.push('state=in.(' + stList.join(',') + ')');
@@ -415,6 +416,60 @@ const rowOut = (c) => ({
   safety: c.safety || '',
   crashes: c.crashes == null ? '' : c.crashes
 });
+
+// ---- Live top-up: carriers added to FMCSA AFTER the newest date in your Supabase census table ----
+let liveKeysCache = null;
+async function liveKeys() {
+  if (liveKeysCache) return liveKeysCache;
+  const r = await fetch(META, { signal: AbortSignal.timeout(6000), headers: tokenHeaders() });
+  const j = await r.json();
+  liveKeysCache = (j.columns || []).map((c) => ({ k: c.fieldName, t: c.dataTypeName }));
+  return liveKeysCache;
+}
+async function liveTopUp(q, from, to, have, warnings) {
+  if (String(q.equip || '') || String(q.cargo || '')) return []; // equipment/cargo filters only exist in your table
+  const r0 = await sb('census?select=add_date&add_date=not.is.null&order=add_date.desc&limit=1');
+  const a0 = await r0.json();
+  const latest = a0 && a0[0] ? day(a0[0].add_date) : '';
+  if (latest && latest >= to) return [];
+  const start = latest && latest >= from ? nextDay(latest) : from;
+  if (start > to) return [];
+  const keys = await liveKeys();
+  const col = (re) => (keys.find((x) => re.test(x.k)) || {}).k || '';
+  const cAdd = keys.find((x) => x.k === 'add_date');
+  if (!cAdd) return [];
+  const cDot = col(/^dot_number$/), cName = col(/^legal_name$/), cDba = col(/^dba_name$/), cPh = col(/^(phone|telephone)$/), cCell = col(/^cell_phone$/),
+    cEm = col(/^email_address$/), cOff = col(/^company_officer_1$/), cPu = col(/^(power_units|nbr_power_unit)$/), cDr = col(/^(total_drivers|driver_total)$/),
+    cCity = col(/^phy_city$/), cSt = col(/^phy_state$/), cDock = col(/^docket1$/), cPre = col(/^docket1prefix$/);
+  if (!cDot) return [];
+  const fmt = (iso) => (cAdd.t === 'text' ? iso.replace(/-/g, '') : iso + 'T00:00:00');
+  let where = 'add_date >= \'' + fmt(start) + '\' AND add_date < \'' + fmt(nextDay(to)) + '\'';
+  const stList = String(q.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
+  if (stList.length && cSt) where += ' AND ' + cSt + ' in (' + stList.map((x) => "'" + x + "'").join(',') + ')';
+  const list = await soda({ $where: where, $order: 'add_date ASC', $limit: 2000 }, 20000, 2);
+  const seen = {}; (have || []).forEach((x) => { seen[String(x.dot_number)] = 1; });
+  const cityQ = String(q.city || '').toUpperCase().trim();
+  const minU = parseInt(q.min, 10) || 0, maxU = parseInt(q.max, 10) || 0;
+  const out = [];
+  (list || []).forEach((c) => {
+    const dot = String(c[cDot] || ''); if (!dot || seen[dot]) return;
+    if (cPre && c[cPre] && String(c[cPre]).toUpperCase() !== 'MC') return;
+    const row = {
+      dot: dot, mc: cDock && c[cDock] ? 'MC' + stripZeros(c[cDock]) : '', name: c[cName] || c[cDba] || '', dba: c[cDba] || '',
+      phone: fmtPhone(c[cPh]), cellPhone: fmtPhone(c[cCell]), email: String(c[cEm] || '').toLowerCase(), officer: c[cOff] || '',
+      powerUnits: num(c[cPu]), drivers: num(c[cDr]), tractors: 0, straightTrucks: 0, trailers: 0, equipment: 'Unknown', cargo: [],
+      city: c[cCity] || '', state: c[cSt] || '', addDate: day(c[cAdd.k]), safety: '', crashes: '', live: true
+    };
+    if (cityQ && String(row.city).toUpperCase().indexOf(cityQ) === -1) return;
+    if (q.hasemail === '1' && !row.email) return;
+    if (q.hasphone === '1' && !row.phone && !row.cellPhone) return;
+    if (minU && row.powerUnits < minU) return;
+    if (maxU && row.powerUnits > maxU) return;
+    out.push(row);
+  });
+  if (out.length) warnings.push('Includes ' + out.length + ' newer carrier(s) loaded live from FMCSA (your saved census table is updated only up to ' + (latest || 'an earlier date') + ').');
+  return out;
+}
 
 module.exports = async (req, res) => {
   try {
@@ -533,7 +588,29 @@ module.exports = async (req, res) => {
       total = isFinite(n) ? n : null;
     }
 
-    let rows = raw.map(rowOut);
+    let liveRows = [];
+    if (mode === 'date' && offset === 0) {
+      try { liveRows = await liveTopUp(req.query, from, to, raw, warnings); } catch (e) { warnings.push('Live FMCSA top-up failed: ' + (e.message || e)); }
+      if (total != null) total += liveRows.length;
+    }
+    let rows = raw.map(rowOut).concat(liveRows);
+    if (mode === 'date') {
+      const needMc = rows.filter((x) => !x.mc);
+      if (needMc.length) {
+        const au1 = await loadAuthority(needMc.map((x) => x.dot), warnings);
+        if (au1.ok) {
+          needMc.forEach((x) => {
+            const l = au1.map[stripZeros(x.dot)] || [];
+            const d = l.find((r) => /^MC/i.test(String(r.docket_number || '')));
+            if (d) x.mc = String(d.docket_number).toUpperCase();
+          });
+          rows = rows.filter((x) => x.mc);
+          total = null;
+        } else {
+          warnings.push('MC numbers of new carriers could not be loaded right now, so carriers without MC are shown. Press Fetch again in a minute.');
+        }
+      }
+    }
     const drop = { units: 0, equip: 0, cargo: 0, auth: 0 };
     let outRows = rows;
 
