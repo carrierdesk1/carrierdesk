@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <body>
-<p>Calling...</p>
 <script>
   const n = new URLSearchParams(location.search).get('n') || '';
   location.href = 'tel:+1' + n;
+  setTimeout(function () { window.close(); }, 1200);
 </script>
 </body>
 </html>
