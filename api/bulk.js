@@ -376,7 +376,7 @@ function censusFilter(q, mode, f, t, from, to) {
     if (to < new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)) p.push('mc_n=not.is.null');
   }
   const stList = String(q.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
-  if (stList.length) p.push('state=in.(' + stList.join(',') + ')');
+  p.push('state=in.(' + only48(stList).join(',') + ')');
   const cityQ = String(q.city || '').toUpperCase().replace(/[^A-Z0-9 .\-]/g, '').trim();
   if (cityQ) p.push('city=ilike.' + encodeURIComponent('*' + cityQ + '*'));
   if (q.hasemail === '1') p.push('email=not.is.null');
@@ -417,6 +417,10 @@ const rowOut = (c) => ({
   crashes: c.crashes == null ? '' : c.crashes
 });
 
+// Only the 48 contiguous US states (no Alaska, Hawaii, DC, territories, Canada or Mexico)
+const L48 = ['AL','AR','AZ','CA','CO','CT','DE','FL','GA','IA','ID','IL','IN','KS','KY','LA','MA','MD','ME','MI','MN','MO','MS','MT','NC','ND','NE','NH','NJ','NM','NV','NY','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VA','VT','WA','WI','WV','WY'];
+function only48(list) { const k = (list || []).filter((x) => L48.indexOf(x) > -1); return list && list.length ? (k.length ? k : ['ZZ']) : L48; }
+
 // ---- Live top-up: carriers added to FMCSA AFTER the newest date in your Supabase census table ----
 let liveKeysCache = null;
 async function liveKeys() {
@@ -445,7 +449,7 @@ async function liveTopUp(q, from, to, have, warnings) {
   const fmt = (iso) => (cAdd.t === 'text' ? iso.replace(/-/g, '') : iso + 'T00:00:00');
   let where = 'add_date >= \'' + fmt(start) + '\' AND add_date < \'' + fmt(nextDay(to)) + '\'';
   const stList = String(q.state || '').toUpperCase().split(/[^A-Z]+/).filter((x) => x.length === 2);
-  if (stList.length && cSt) where += ' AND ' + cSt + ' in (' + stList.map((x) => "'" + x + "'").join(',') + ')';
+  if (cSt) where += ' AND ' + cSt + ' in (' + only48(stList).map((x) => "'" + x + "'").join(',') + ')';
   const list = await soda({ $where: where, $order: 'add_date ASC', $limit: 2000 }, 20000, 2);
   const seen = {}; (have || []).forEach((x) => { seen[String(x.dot_number)] = 1; });
   const cityQ = String(q.city || '').toUpperCase().trim();
