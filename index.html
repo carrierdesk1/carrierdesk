@@ -789,7 +789,7 @@ a.pl-ct:hover{background:#fff1f1;text-decoration:none}
 <div class="bw"><div id="avList"></div></div></div></section>
 <section id="viewLeads" class="pad" style="display:none;margin-top:24px">
       <h3>My leads</h3>
-      <div class="mlbar"><b>✉ Send email</b><span class="small" id="mlInfo"></span><button type="button" class="btn-o" id="mlVerify">✅ Verify emails</button><button type="button" class="mln" data-n="20">20 emails</button><button type="button" class="mln" data-n="25">25 emails</button><button type="button" class="mln" data-n="50">50 emails</button></div>
+      <div class="mlbar"><b>✉ Send email</b><span class="small" id="mlInfo"></span><button type="button" class="btn-o" id="mlVerify">✅ Verify emails</button><button type="button" class="btn-o" id="mlReset">↺ Reset count</button><button type="button" class="mln" data-n="20">20 emails</button><button type="button" class="mln" data-n="25">25 emails</button><button type="button" class="mln" data-n="50">50 emails</button></div>
       <div id="vrBox" class="notice" style="display:none"></div>
       <div class="tools" style="margin-bottom:12px">
         <button id="csv" type="button" class="btn-g">Download CSV</button>
@@ -1617,8 +1617,8 @@ $('bsave').onclick = function () {
   setLeads(l); renderLeads(); bSel = {}; bRender(); alert(n + ' new leads saved.');
 };
 $('bcsv').onclick = function () {
-  csvOut([['MC', 'USDOT', 'Company', 'DBA', 'Officer', 'Phone', 'Cell', 'Email', 'City', 'State', 'Equipment', 'Authority', 'Insurance', 'Safety rating', 'Crashes', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
-    bTargets().map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.officer, x.phone, x.cellPhone, x.email, x.city, x.state, x.equipment, x.authority, x.ins ? x.ins + (x.insAmt ? ' $' + x.insAmt + 'K' : '') : '', x.safety, x.crashes, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; })), 'bulk-carriers.csv');
+  csvOut([['MC', 'USDOT', 'Company', 'DBA', 'Officer', 'Phone', 'Cell', 'Email', 'Location', 'Equipment', 'Authority', 'Insurance', 'Safety rating', 'Crashes', 'Power units', 'Drivers', 'Straight trucks', 'Tractors', 'Trailers', 'Cargo', 'Added']].concat(
+    bTargets().map(function (x) { return [x.mc, x.dot, x.name, x.dba, x.officer, x.phone, x.cellPhone, x.email, [x.city, x.state].filter(Boolean).join(', '), x.equipment, x.authority, x.ins ? x.ins + (x.insAmt ? ' $' + x.insAmt + 'K' : '') : '', x.safety, x.crashes, x.powerUnits, x.drivers, x.straightTrucks, x.tractors, x.trailers, x.cargo.join('; '), x.addDate]; })), 'bulk-carriers.csv');
 };
 $('bselall').onclick = function () { bView(bLeadMap()).forEach(function (x) { bSel[x._k] = 1; }); bRender(); };
 $('bselnone').onclick = function () { bSel = {}; bRender(); };
@@ -3125,6 +3125,18 @@ var _sv10 = showView;
 showView = function (v) {
   if (v === 'avail' && !planTier().avail) { upOpen('avail'); return; }
   _sv10(v); $('viewAvail').style.display = v === 'avail' ? '' : 'none'; if (v === 'avail') avRender();
+};
+
+/* ===== My Leads: reset email count (start sending from the beginning again) ===== */
+$('mlReset').onclick = function () {
+  var em = getLeads().filter(function (x) { return lgMine(x) && (x.log || []).some(function (g) { return g.type === 'email'; }); });
+  if (!em.length) { alert('Nothing to reset. No lead has an email logged yet.'); return; }
+  if (!confirm(em.length + ' lead(s) that were already emailed will go back to New, so 20 / 25 / 50 start again from the beginning.\n\nThe daily target count on the Team page does not change. Continue?')) return;
+  var d = {}; em.forEach(function (x) { d[x.dot] = 1; });
+  var l = getLeads();
+  l.forEach(function (x) { if (!d[x.dot]) return; x.log = (x.log || []).filter(function (g) { return g.type !== 'email'; }); if (x.status === 'Contacted') x.status = 'New'; });
+  setLeads(l); try { localStorage.removeItem(emKey()); } catch (e) {}
+  renderLeads(); planBar(); alert(em.length + ' lead(s) reset. You can send emails again from the start.');
 };
 </script>
 </body>
